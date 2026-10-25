@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "omarchy-trcc",
   "name": "Omarchy TRCC",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "author": "gsus",
   "license": "GPL-3.0-or-later",
-  "description": "Control nativo de la Trofeo Vision sin TRCC: temas, métricas y visuales sincronizados con Omarchy.",
+  "description": "Native control for the Thermalright Trofeo Vision without TRCC: themes, live metrics and audio visuals synced with Omarchy.",
   "kinds": ["bar-widget"],
   "entryPoints": {"barWidget": "Trofeo.qml"},
   "barWidget": {

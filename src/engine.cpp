@@ -420,7 +420,7 @@ public:
                 text(painter,{x,350,290,50},details[i],18,palette.muted);
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
-            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.4",16,palette.muted);
+            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.5",16,palette.muted);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));

@@ -1,58 +1,96 @@
-# omarchy-trcc · v0.0.4
+# omarchy-trcc · v0.0.5
 
-Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB propio en C++/Qt: **no requiere instalar ni ejecutar TRCC**.
+**English** · [Español](README.es.md)
 
-![Panel actual de omarchy-trcc con datos en vivo](preview.png)
+Omarchy plugin for the **Thermalright Trofeo Vision 1280×480**. Its own native
+C++/Qt USB engine: **TRCC does not need to be installed or run**.
 
-## Funciones
+![Current omarchy-trcc panel with live data](preview.png)
 
-- Botón **🖥 TR** en la barra; panel con los colores, fuentes, bordes y espaciado del tema activo de Omarchy.
-- Idioma automático según `LC_ALL`, `LC_MESSAGES` y `LANG`: inglés/español, con inglés como respaldo para otros idiomas. Panel, mensajes y etiquetas nativas comparten el catálogo; los textos de tus propios temas se conservan.
-- Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
-- Pestaña Temas con lista compacta y una sola vista previa desplegable; ver un tema no lo aplica.
-- Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
-- Cuatro diseños nativos: **Focus, Terminal, Rings y Dots**. La pantalla también sigue automáticamente la paleta del sistema.
-- Temperatura/carga CPU y GPU, uso de RAM, fecha y reloj. Un sensor no disponible se muestra como `—`.
-- Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).
-- Cuatro visuales propios: **Bars, Wave, Rings y Particles**, analizados desde la salida de audio del sistema. No usa el micrófono ni guarda audio.
-- Seguimiento opcional del acento, activado inicialmente; cuando se desactiva se conserva un color fijo.
-- Reconexión automática USB y servicio de usuario. El motor sigue actualizando la pantalla aunque cierres el panel.
+## Features
 
-## Compatibilidad
+- **🖥 TR** button in the bar; panel with the colors, fonts, borders and spacing
+  of the active Omarchy theme.
+- Automatic language from `LC_ALL`, `LC_MESSAGES` and `LANG`: English/Spanish,
+  with English as the fallback for other languages. Panel, messages and native
+  labels share one catalog; the text in your own themes is kept as is.
+- Home view with CPU/GPU/RAM temperature (when sensors exist), load, used memory
+  and a preview of the screen; refreshed every two seconds while the panel is
+  open.
+- Themes tab with a compact list and a single expandable preview; previewing a
+  theme does not apply it.
+- Import 1280×480 images and JSON themes with metrics; you can remove the
+  imported copies without deleting your originals.
+- Four native layouts: **Focus, Terminal, Rings and Dots**. The screen also
+  follows the system palette automatically.
+- CPU and GPU temperature/load, RAM usage, date and clock. A missing sensor is
+  shown as `—`.
+- Software brightness, 0/90/180/270° rotation, metrics over the visuals and
+  game mode (goes back to the metrics panel when CPU >75%).
+- Four built-in audio visuals: **Bars, Wave, Rings and Particles**, analyzed
+  from the system audio output. It does not use the microphone or store audio.
+- Optional accent-color tracking, on by default; when off, a fixed color is
+  kept.
+- Automatic USB reconnection and a user service. The engine keeps updating the
+  screen even when the panel is closed.
 
-v0.0.4 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+## Compatibility
 
-Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
+v0.0.5 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
+checks the panel identity on connect and rejects other geometries. It is not
+compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
+shares the USB ID.
 
-## Instalación
+Temperatures come from hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`,
+`nouveau`), CPU/RAM load from `/proc` and GPU load from the DRM
+`gpu_busy_percent` node. RAM temperature comes from `spd5118`/`jc42` sensors and
+shows the highest available value. Proprietary NVIDIA telemetry is not included
+yet. This version draws its own layouts and visuals; it does not import TRCC
+`.dc` themes, KarmaViz shaders or presets.
 
-La instalación utiliza las herramientas de Omarchy: un compilador C++ (`g++` o `clang++`), `pkg-config`, Qt 6.7+ con `rcc`, libusb, Python estándar y PipeWire/libpulse. **No requiere CMake, paquetes de pip ni entornos virtuales.** Omarchy Shell debe ofrecer el sistema de plugins y los componentes `qs.Ui`.
+## Requirements
 
-En la lista de paquetes de Omarchy, `clang` y `quickshell` aportan el compilador y Qt; `python-gobject` aporta Python; `ddcutil` aporta libusb. La imagen de instalación incluye `base-devel` (GCC y pkgconf) y libpulse. No se instalan paquetes automáticamente ni se modifica la instalación de Omarchy.
+Building uses tools Omarchy already ships: a C++ compiler (`g++` or `clang++`),
+`pkg-config`, Qt 6.7+ with `rcc`, libusb, standard Python and
+PipeWire/libpulse. **No CMake, pip packages or virtual environments.** Omarchy
+Shell must provide the plugin system and the `qs.Ui` components.
+
+In Omarchy's package list, `clang` and `quickshell` provide the compiler and Qt;
+`python-gobject` provides Python; `ddcutil` provides libusb. The install image
+includes `base-devel` (GCC and pkgconf) and libpulse. No packages are installed
+automatically and the Omarchy installation is not modified.
+
+## Install
 
 ```sh
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
 
-Al activarlo por primera vez, el plugin compila automáticamente su motor y prepara el servicio de usuario. Las actualizaciones recompilan el motor solo si cambió el código o la versión de sus bibliotecas. Las carpetas temporales de compilación se eliminan al terminar. No instala paquetes automáticamente, no usa sudo y no modifica `/usr/share/omarchy`.
+When first enabled, the plugin builds its engine automatically and sets up the
+user service. Updates rebuild the engine only if the code or its library
+versions changed. Temporary build folders are deleted afterwards. It does not
+install packages automatically, does not use sudo and does not modify
+`/usr/share/omarchy`.
 
-Para actualizar:
+To update:
 
 ```sh
 omarchy plugin update omarchy-trcc
 ```
 
-Si falta permiso USB, ejecuta desde una terminal:
+If USB permission is missing, run from a terminal:
 
 ```sh
 bash ~/.config/omarchy/plugins/omarchy-trcc/setup-usb.sh
 ```
 
-Ese paso opcional solicita sudo para instalar una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
+That optional step asks for sudo to install a `uaccess` rule limited to
+`0416:5302`. It does not grant global USB write access. Close any other driver
+already using the screen before starting the engine.
 
-## Uso
+## Usage
 
-Pulsa **🖥 TR** para abrir/cerrar el panel. Desde una terminal:
+Click **🖥 TR** to open/close the panel. From a terminal:
 
 ```sh
 omarchy-shell omarchy-trcc open
@@ -63,61 +101,89 @@ python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo visual bars
 systemctl --user status omarchy-trcc
 ```
 
-Los temas personalizados se copian a `~/.local/state/omarchy-trcc/themes/`. Ajustes y vistas previas se guardan en `~/.local/state/omarchy-trcc/`. El socket está en `$XDG_RUNTIME_DIR/omarchy-trcc.sock` y solo permite acceso a tu usuario. El motor detecta cambios en `~/.local/state/omarchy/current/theme/colors.toml` cada segundo, incluso con el panel cerrado.
+Custom themes are copied to `~/.local/state/omarchy-trcc/themes/`. Settings and
+previews are stored in `~/.local/state/omarchy-trcc/`. The socket lives at
+`$XDG_RUNTIME_DIR/omarchy-trcc.sock` and only your user can access it. The
+engine checks `~/.local/state/omarchy/current/theme/colors.toml` for changes
+every second, even with the panel closed.
 
-## Añadir tus propios temas
+## Adding your own themes
 
-En **Temas → Añadir tema…**, selecciona una imagen PNG/JPG/WebP de **1280×480**, o un archivo JSON de tema. Seleccionar un tema despliega su vista previa; **Aplicar en la Trofeo** lo activa. **Quitar copia** borra únicamente la copia de la biblioteca. La importación no cambia lo que está mostrando la pantalla.
+In **Themes → Add theme…**, pick a **1280×480** PNG/JPG/WebP image or a JSON
+theme file. Selecting a theme expands its preview; **Apply on the Trofeo**
+activates it. **Remove copy** deletes only the library copy. Importing does not
+change what the screen is showing.
 
-Para crear un panel con métricas, copia [examples/mi-tema.json](examples/mi-tema.json), edita su nombre/textos/posiciones y añádelo desde el selector. También puedes importarlo desde la terminal:
+To make a panel with metrics, copy [examples/mi-tema.json](examples/mi-tema.json),
+edit its name/text/positions and add it from the picker. You can also import it
+from a terminal:
 
 ```sh
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo import-theme /ruta/a/mi-tema.json
+python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo import-theme /path/to/my-theme.json
 ```
 
-El formato usa `schema: 1`, `width: 1280`, `height: 480`, un `name` y una lista `elements`. Cada elemento `type: "text"` define `text`, `x`, `y`, `width`, `height` y `fontSize`; admite `bold`, `align` (`left`, `center`, `right`) y `color`. Los colores pueden ser `background`, `foreground`, `accent`, `muted`, `green` (siguen Omarchy) o `#RRGGBB`.
+The format uses `schema: 1`, `width: 1280`, `height: 480`, a `name` and an
+`elements` list. Each `type: "text"` element defines `text`, `x`, `y`, `width`,
+`height` and `fontSize`; it accepts `bold`, `align` (`left`, `center`, `right`)
+and `color`. Colors can be `background`, `foreground`, `accent`, `muted`,
+`green` (they follow Omarchy) or `#RRGGBB`.
 
-Los textos pueden incluir `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`, `{gpu_load}`, `{ram}`, `{time}`, `{date}` y `{theme}`. Las temperaturas son números en °C; `{ram}` es el porcentaje de memoria usada. Los sensores ausentes se muestran como `—`.
+Text can include `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`,
+`{gpu_load}`, `{ram}`, `{time}`, `{date}` and `{theme}`. Temperatures are
+numbers in °C; `{ram}` is the used memory percentage. Missing sensors show as
+`—`.
 
-Opcionalmente, `background` indica una imagen de 1280×480 dentro de la misma carpeta del JSON, por ejemplo `"background": "fondo.png"`. Se guarda una copia normalizada; el tema importado no depende del archivo original. `backgroundColor` acepta los mismos colores que los textos. Los temas solo contienen datos, sin scripts ni código ejecutable. No son temas `.dc` de TRCC.
+Optionally, `background` names a 1280×480 image in the same folder as the JSON,
+for example `"background": "background.png"`. A normalized copy is stored; the
+imported theme does not depend on the original file. `backgroundColor` accepts
+the same colors as text. Themes contain only data, no scripts or executable
+code. They are not TRCC `.dc` themes.
 
-## Sistema limpio y desinstalación
+## Clean system and removal
 
-La instalación usa únicamente:
+The install uses only:
 
-- `~/.config/omarchy/plugins/omarchy-trcc/` (checkout administrado por Omarchy)
-- `~/.config/systemd/user/omarchy-trcc.service` y su enlace de activación
-- Una entrada `omarchy-trcc` en la barra de `shell.json`
-- `~/.local/state/omarchy-trcc/` para ajustes, temas importados, vistas previas y una única imagen en vivo que se sobrescribe
-- Socket/bloqueo temporales en `$XDG_RUNTIME_DIR`
-- Opcionalmente, `/etc/udev/rules.d/70-omarchy-trcc.rules` si ejecutaste `setup-usb.sh`
+- `~/.config/omarchy/plugins/omarchy-trcc/` (checkout managed by Omarchy)
+- `~/.config/systemd/user/omarchy-trcc.service` and its enable link
+- An `omarchy-trcc` entry in the bar in `shell.json`
+- `~/.local/state/omarchy-trcc/` for settings, imported themes, previews and a
+  single live image that gets overwritten
+- Temporary socket/lock in `$XDG_RUNTIME_DIR`
+- Optionally, `/etc/udev/rules.d/70-omarchy-trcc.rules` if you ran
+  `setup-usb.sh`
 
-Respeta `XDG_CONFIG_HOME` y `XDG_STATE_HOME`. El binario compilado queda en `~/.local/state/omarchy-trcc/bin/`; la compilación temporal se borra. La eliminación normal del plugin también retira el motor y su unidad de usuario, conservando tus ajustes y temas personalizados.
+It respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`. The built binary lives in
+`~/.local/state/omarchy-trcc/bin/`; the temporary build is deleted. Normal
+plugin removal also removes the engine and its user unit, keeping your settings
+and custom themes.
 
 ```sh
 omarchy plugin remove omarchy-trcc
-# Alternativa para borrar también tus ajustes y temas importados:
+# Alternative that also deletes your settings and imported themes:
 bash ~/.config/omarchy/plugins/omarchy-trcc/uninstall.sh --purge
 ```
 
-No elimina dependencias compartidas, configuraciones de TRCC ni otros plugins. Al detener el motor la pantalla conserva la última imagen enviada.
+It does not remove shared dependencies, TRCC settings or other plugins. When the
+engine stops, the screen keeps the last image sent.
 
-## Desarrollo
+## Development
 
 ```sh
-# Compila, ejecuta las pruebas nativas y elimina la compilación temporal:
+# Build, run the native tests and delete the temporary build:
 python native_build.py --test
 PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
 omarchy plugin validate .
 
-# Opcional, para conservar un binario de desarrollo:
+# Optional, to keep a development binary:
 python native_build.py --output build
 ```
 
-La compilación se realiza únicamente con `native_build.py`, con argumentos separados, sin ejecutar un shell, y funciona con rutas que contienen espacios.
+Building is done only through `native_build.py`, with separate arguments,
+without running a shell, and it works with paths containing spaces.
 
-La validación de esta versión incluye compilar y ejecutar las pruebas con un `PATH` limitado sin CMake, además de la actualización del plugin en el equipo real. No se ha ejecutado una instalación completa de Omarchy desde ISO para esta comprobación.
+The native test checks packet structure/alignment, geometry, renderers and input
+validation without touching USB. The client tests check fragmented responses,
+limits and connection errors. The real connection is verified through the
+handshake and sending full frames.
 
-La prueba nativa verifica estructura/alineación de paquetes, geometría, renderizadores y validación de entradas sin acceder al USB. Las pruebas del cliente verifican respuestas fragmentadas, límites y errores de conexión. La conexión real está comprobada mediante handshake y envío completo de frames.
-
-Licencia **GPL-3.0-or-later**. Créditos del protocolo en [NOTICE.md](NOTICE.md).
+License **GPL-3.0-or-later**. Protocol credits in [NOTICE.md](NOTICE.md).

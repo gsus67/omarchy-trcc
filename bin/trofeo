@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 import socket
 import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from i18n import translate as tr
 
 COMMANDS = ("status", "brightness", "orientation", "theme", "overlay", "game",
             "visual", "accent", "follow-accent", "reconnect", "import-theme", "remove-theme")
@@ -19,16 +22,16 @@ def request(command, args=(), socket_path=None):
         try:
             client.connect(str(path))
         except (FileNotFoundError, ConnectionRefusedError) as error:
-            raise ValueError("El motor está detenido. Ejecuta: systemctl --user start omarchy-trcc") from error
+            raise ValueError(tr("El motor está detenido. Ejecuta: systemctl --user start omarchy-trcc")) from error
         client.sendall(json.dumps({"command": command, "args": list(args)}).encode() + b"\n")
         received = bytearray()
         while b"\n" not in received:
             chunk = client.recv(65536)
             if not chunk:
-                raise ValueError("El motor cerró la conexión sin responder.")
+                raise ValueError(tr("El motor cerró la conexión sin responder."))
             received.extend(chunk)
             if len(received) > 1_000_000:
-                raise ValueError("Respuesta demasiado grande.")
+                raise ValueError(tr("Respuesta demasiado grande."))
         return json.loads(received.split(b"\n", 1)[0])
 
 
@@ -40,7 +43,7 @@ def main():
     options = parser.parse_args()
     try:
         if options.device != "0416:5302":
-            raise ValueError("v0.0.2 solo admite Trofeo 1280×480, USB 0416:5302.")
+            raise ValueError(tr("Solo se admite Trofeo 1280×480, USB 0416:5302."))
         result = request(options.command, options.args)
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result.get("ok") else 1

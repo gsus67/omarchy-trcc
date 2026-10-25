@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.2
+# omarchy-trcc · v0.0.3
 
 Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB propio en C++/Qt: **no requiere instalar ni ejecutar TRCC**.
 
@@ -7,6 +7,7 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 ## Funciones
 
 - Botón **🖥 TR** en la barra; panel con los colores, fuentes, bordes y espaciado del tema activo de Omarchy.
+- Idioma automático según `LC_ALL`, `LC_MESSAGES` y `LANG`: inglés/español, con inglés como respaldo para otros idiomas. Panel, mensajes y etiquetas nativas comparten el catálogo; los textos de tus propios temas se conservan.
 - Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
 - Pestaña Temas con lista compacta y una sola vista previa desplegable; ver un tema no lo aplica.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
@@ -19,7 +20,7 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ## Compatibilidad
 
-v0.0.2 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+v0.0.3 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
 Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 

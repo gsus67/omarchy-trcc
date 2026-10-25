@@ -1,8 +1,10 @@
+#include "i18n.h"
 // SPDX-License-Identifier: GPL-3.0-or-later
 // HID Type 2 protocol attribution: see NOTICE.md.
 #include <QGuiApplication>
 #include <QBuffer>
 #include <QDateTime>
+#include <QLocale>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -77,7 +79,7 @@ public:
     }
     bool open() {
         close();
-        if (!context) { error = "No se pudo iniciar libusb"; return false; }
+        if (!context) { error = uiText("No se pudo iniciar libusb"); return false; }
         libusb_device **devices = nullptr;
         ssize_t count = libusb_get_device_list(context, &devices);
         if (count < 0) { error = libusb_error_name(int(count)); return false; }
@@ -121,7 +123,7 @@ public:
         }
         libusb_free_device_list(devices, 1);
         if (rc != 0 || !handle) {
-            error = rc == LIBUSB_ERROR_ACCESS ? "Sin permiso USB: ejecuta setup-usb.sh" : QString::fromLatin1(libusb_error_name(rc));
+            error = rc == LIBUSB_ERROR_ACCESS ? uiText("Sin permiso USB: ejecuta setup-usb.sh") : QString::fromLatin1(libusb_error_name(rc));
             close(); return false;
         }
         QByteArray init(512, '\0'); init.replace(0, 4, QByteArray::fromHex("dadbdcdd")); init[12] = 1;
@@ -134,13 +136,13 @@ public:
             if (rc == 0 && got >= 20 && reply.left(4) == init.left(4) && reply[12] == 1) {
                 pm = static_cast<unsigned char>(reply[5]); sub = static_cast<unsigned char>(reply[4]);
                 if (pm != 128 && pm != 68) {
-                    error = QString("Panel PM=%1 SUB=%2 no compatible: se requiere Trofeo 1280×480").arg(pm).arg(sub);
+                    error = QString(uiText("Panel PM=%1 SUB=%2 no compatible: se requiere Trofeo 1280×480")).arg(pm).arg(sub);
                     close(); return false;
                 }
                 error.clear(); return true;
             }
         }
-        error = "La Trofeo no respondió al handshake; comprueba que otro controlador no esté usándola";
+        error = uiText("La Trofeo no respondió al handshake; comprueba que otro controlador no esté usándola");
         close(); return false;
     }
     bool send(const QImage &image, int orientation) {
@@ -148,13 +150,13 @@ public:
         int angle = ((sub == 2 ? 90 : 0) - orientation + 360) % 360;
         QImage wire = angle ? image.transformed(QTransform().rotate(angle)) : image;
         QByteArray jpeg; QBuffer buffer(&jpeg); buffer.open(QIODevice::WriteOnly);
-        if (!wire.save(&buffer, "JPG", 82)) { error = "No hay codificador JPEG disponible"; return false; }
+        if (!wire.save(&buffer, "JPG", 82)) { error = uiText("No hay codificador JPEG disponible"); return false; }
         QByteArray packet = framePacket(jpeg);
         for (int pos = 0; pos < packet.size(); pos += 512) {
             int sent = 0;
             int rc = transfer(epOut, reinterpret_cast<unsigned char *>(packet.data() + pos), 512, &sent, 1500);
             if (rc != 0 || sent != 512) {
-                error = QString("Error de envío USB: %1").arg(libusb_error_name(rc));
+                error = QString(uiText("Error de envío USB: %1")).arg(libusb_error_name(rc));
                 close(); return false;
             }
         }
@@ -257,7 +259,7 @@ public:
         });
         QObject::connect(&audio, &QProcess::readyReadStandardError, [&] { audioError = QString::fromUtf8(audio.readAllStandardError()).trimmed(); });
         QObject::connect(&audio, &QProcess::errorOccurred, [&](QProcess::ProcessError error) {
-            if (error == QProcess::FailedToStart) audioError = "No se pudo iniciar parec: " + audio.errorString();
+            if (error == QProcess::FailedToStart) audioError = uiText("No se pudo iniciar parec: ") + audio.errorString();
         });
     }
     ~Engine() { audio.kill(); audio.waitForFinished(1000); }
@@ -270,7 +272,7 @@ public:
         if (visual().isEmpty() || audio.state() != QProcess::NotRunning || offline) return;
         QProcess sink;
         sink.start("pactl", {"get-default-sink"});
-        if (!sink.waitForFinished(1000) || sink.exitCode() != 0) { audioError = "No se encontró la salida de audio de PulseAudio/PipeWire"; return; }
+        if (!sink.waitForFinished(1000) || sink.exitCode() != 0) { audioError = uiText("No se encontró la salida de audio de PulseAudio/PipeWire"); return; }
         QString target = QString::fromUtf8(sink.readAllStandardOutput()).trimmed() + ".monitor";
         audioError.clear(); samples.clear();
         audio.start("parec", {"--device=" + target, "--format=float32le", "--rate=22050", "--channels=1", "--raw"});
@@ -329,7 +331,7 @@ public:
                 {"ram",QString::number(qRound(metrics.ram))},
                 {"ram_temp",metrics.ramTemp<0?"—":QString::number(qRound(metrics.ramTemp))},
                 {"time",QTime::currentTime().toString("HH:mm")},
-                {"date",QDate::currentDate().toString("dd MMM yyyy")},{"theme",palette.name}};
+                {"date",QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy")},{"theme",palette.name}};
             for(auto item:theme.spec["elements"].toArray()) {
                 QJsonObject e=item.toObject(); QString value=e["text"].toString();
                 for(auto it=tokens.begin();it!=tokens.end();++it) value.replace("{"+it.key()+"}",it.value());
@@ -343,7 +345,7 @@ public:
             text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
             text(painter, {30,85,420,40}, palette.name, 20, palette.muted);
             const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
-            const QStringList labels = {"CPU", "GPU", "RAM", "HORA"};
+            const QStringList labels = {"CPU", "GPU", "RAM", uiText("HORA")};
             for (int i = 0; i < 4; ++i) {
                 text(painter, {30,160.+i*265,420,45}, labels[i], 27, palette.accent);
                 text(painter, {30,205.+i*265,420,140}, values[i], 92, palette.foreground, true);
@@ -389,10 +391,10 @@ public:
             }
         } else {
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
-            text(painter, {920,20,320,50}, QDate::currentDate().toString("dd MMM yyyy"), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
-            const QStringList labels = {"CPU", "GPU", "RAM", "HORA"};
+            text(painter, {920,20,320,50}, QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy"), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            const QStringList labels = {"CPU", "GPU", "RAM", uiText("HORA")};
             const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
-            const QStringList details = {QString::number(qRound(metrics.cpu))+"% CARGA", metrics.gpu<0 ? "SIN SENSOR DE CARGA" : QString::number(qRound(metrics.gpu))+"% CARGA", "MEMORIA EN USO", "HORA LOCAL"};
+            const QStringList details = {uiText("%1% CARGA").arg(qRound(metrics.cpu)), metrics.gpu<0 ? uiText("SIN SENSOR DE CARGA") : uiText("%1% CARGA").arg(qRound(metrics.gpu)), uiText("MEMORIA EN USO"), uiText("HORA LOCAL")};
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);
                 for (int i=0;i<4;++i) {
@@ -418,7 +420,7 @@ public:
                 text(painter,{x,350,290,50},details[i],18,palette.muted);
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
-            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.2",16,palette.muted);
+            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.3",16,palette.muted);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));
@@ -438,7 +440,8 @@ public:
         const QStringList names = {"Focus", "Terminal", "Rings", "Dots"};
         for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
         for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
-        for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",id.left(1).toUpper()+id.mid(1)},{"presets",QJsonArray{}}});
+        const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
+        for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
             {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
@@ -452,7 +455,7 @@ public:
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
         QString value=args.isEmpty()?QString():args[0].toString();
         if(op=="status") return status();
-        auto invalid=[] { return QJsonObject{{"ok",false},{"message","Acción o valor no válido"}}; };
+        auto invalid=[] { return QJsonObject{{"ok",false},{"message",uiText("Acción o valor no válido")}}; };
         if(op=="import-theme"&&args.size()==1) {
             auto result=customThemes.importFile(value);
             if(result["ok"].toBool()) previews();
@@ -462,7 +465,7 @@ public:
             if(!customThemes.remove(value)) return invalid();
             QFile::remove(stateDir+"/previews/"+value+".png");
             if(settings["layout"].toString()==value) { settings["layout"]="focus"; lastFrame=0; }
-            save(); return {{"ok",true},{"message","Tema eliminado de la biblioteca."}};
+            save(); return {{"ok",true},{"message",uiText("Tema eliminado de la biblioteca.")}};
         }
         if(op=="brightness") {
             bool ok; int n=value.toInt(&ok); if(!ok||n<0||n>100) return invalid(); settings["brightness"]=n;
@@ -484,7 +487,7 @@ public:
         if(visual().isEmpty()) { audio.kill(); samples.clear(); }
         else startAudio();
         save(); lastFrame=0;
-        return {{"ok",true},{"message","Cambio aplicado"}};
+        return {{"ok",true},{"message",uiText("Cambio aplicado")}};
     }
     void tick() {
         qint64 now=QDateTime::currentMSecsSinceEpoch();
@@ -533,7 +536,7 @@ public:
                     if(received->size()>8192) { client->disconnectFromServer(); return; }
                     if(!received->contains('\n')) return;
                     QJsonParseError error; auto request=QJsonDocument::fromJson(received->split('\n').first(),&error);
-                    QJsonObject response=error.error==QJsonParseError::NoError&&request.isObject()?command(request.object()):QJsonObject{{"ok",false},{"message","JSON no válido"}};
+                    QJsonObject response=error.error==QJsonParseError::NoError&&request.isObject()?command(request.object()):QJsonObject{{"ok",false},{"message",uiText("JSON no válido")}};
                     client->write(QJsonDocument(response).toJson(QJsonDocument::Compact)+'\n');
                     client->disconnectFromServer();
                 });
@@ -580,6 +583,10 @@ int main(int argc,char **argv) {
             QImage image=engine.render("focus","");
             ok=ok&&image.size()==((angle==90||angle==270)?QSize(H,W):QSize(W,H));
         }
+        qputenv("LC_ALL","en_US.UTF-8");
+        ok=ok&&uiText("HORA")=="TIME";
+        qputenv("LC_ALL","es_MX.UTF-8");
+        ok=ok&&uiText("HORA")==QString::fromUtf8("HORA");
         QTextStream(stdout)<<(ok?"PASS: packet alignment, geometry, native layouts, audio renderers and input validation\n":"FAIL\n");
         return ok?0:1;
     }

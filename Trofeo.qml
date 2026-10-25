@@ -31,6 +31,19 @@ Panel {
   property string expandedTheme: ""
   property string operationError: ""
   property bool initialized: false
+  property var translations: ({})
+  readonly property string language: (Quickshell.env("LC_ALL") || Quickshell.env("LC_MESSAGES") || Quickshell.env("LANG") || Qt.locale().name).toLowerCase().split(/[_.-]/)[0] === "es" ? "es" : "en"
+  function t(source) {
+    if (language === "es") return source
+    var catalog = translations.en || ({})
+    return catalog[source] || source
+  }
+  FileView {
+    path: root.pluginDirectory + "/i18n/messages.json"
+    onLoaded: {
+      try { root.translations = JSON.parse(text()) } catch (e) { root.translations = ({}) }
+    }
+  }
 
   function refresh() {
     if (!statusProc.running && !actionProc.running) {
@@ -87,7 +100,7 @@ Panel {
     function preview(id: string): void { root.expandedTheme = id; root.page = "themes"; root.open() }
     function status(): string {
       return JSON.stringify({ready: root.ready, error: root.error, busy: root.busy,
-        page: root.page, expandedTheme: root.expandedTheme, accent: String(Commons.Color.accent),
+        page: root.page, language: root.language, expandedTheme: root.expandedTheme, accent: String(Commons.Color.accent),
         background: String(Commons.Color.background),
         theme: root.lcdState.current_theme || "", playing: root.deviceData.playing || ""})
     }
@@ -108,7 +121,7 @@ Panel {
       try {
         var result = JSON.parse(resultText)
         if (!result.ok) { root.operationError = result.message; root.error = result.message }
-      } catch (e) { root.operationError = "No se pudo preparar el motor"; root.error = root.operationError }
+      } catch (e) { root.operationError = root.t("No se pudo preparar el motor"); root.error = root.operationError }
       root.refresh()
     }
   }
@@ -121,7 +134,7 @@ Panel {
     onExited: function(code) {
       try {
         var result = JSON.parse(root.statusOutput)
-        if (!result.ok) throw new Error(result.message || "El motor no respondió")
+        if (!result.ok) throw new Error(result.message || root.t("El motor no respondió"))
         root.deviceData = result
         if (root.selectedVisual === "") root.selectedVisual = result.playing || "bars"
         root.error = root.operationError || result.deviceError || result.audioError || ""
@@ -141,13 +154,13 @@ Panel {
       try {
         var result = JSON.parse(root.actionOutput)
         if (code !== 0 || !result.ok) {
-          root.operationError = result.message || "No se pudo aplicar el cambio"
+          root.operationError = result.message || root.t("No se pudo aplicar el cambio")
           root.error = root.operationError
         } else if (result.themeId) {
           root.expandedTheme = result.themeId
           root.page = "themes"
         }
-      } catch (e) { root.operationError = root.actionError.trim() || "El motor no pudo completar la acción"; root.error = root.operationError }
+      } catch (e) { root.operationError = root.actionError.trim() || root.t("El motor no pudo completar la acción"); root.error = root.operationError }
       root.refresh()
       Qt.callLater(root.pump)
     }
@@ -164,9 +177,9 @@ Panel {
 
   Dialogs.FileDialog {
     id: importDialog
-    title: "Añadir tema a Omarchy TRCC"
+    title: root.t("Añadir tema a Omarchy TRCC")
     fileMode: Dialogs.FileDialog.OpenFile
-    nameFilters: ["Temas e imágenes (*.json *.png *.jpg *.jpeg *.webp)", "Todos los archivos (*)"]
+    nameFilters: [root.t("Temas e imágenes (*.json *.png *.jpg *.jpeg *.webp)"), root.t("Todos los archivos (*)")]
     onAccepted: {
       var filePath = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
       root.run(["import-theme", filePath])
@@ -212,7 +225,7 @@ Panel {
           }
           Text {
             width: parent.width
-            text: (root.ready ? root.deviceData.resolution + " · " + (root.deviceData.usbPresent ? "USB conectado" : "USB no detectado") : (bootstrapProc.running ? "Preparando el motor…" : "Conectando con el motor…")) + (root.busy ? " · Aplicando…" : "")
+            text: (root.ready ? root.deviceData.resolution + " · " + (root.deviceData.usbPresent ? root.t("USB conectado") : root.t("USB no detectado")) : (bootstrapProc.running ? root.t("Preparando el motor…") : root.t("Conectando con el motor…"))) + (root.busy ? root.t(" · Aplicando…") : "")
             color: Commons.Color.muted
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -221,10 +234,10 @@ Panel {
           PanelSeparator { foreground: root.barForeground }
           Row {
             spacing: Style.space(6)
-            Button { text: "Inicio"; selected: root.page === "live"; onClicked: root.page = "live" }
-            Button { text: "Pantalla"; selected: root.page === "screen"; onClicked: root.page = "screen" }
-            Button { text: "Temas"; selected: root.page === "themes"; onClicked: root.page = "themes" }
-            Button { text: "Visuales"; selected: root.page === "visuals"; onClicked: root.page = "visuals" }
+            Button { text: root.t("Inicio"); selected: root.page === "live"; onClicked: root.page = "live" }
+            Button { text: root.t("Pantalla"); selected: root.page === "screen"; onClicked: root.page = "screen" }
+            Button { text: root.t("Temas"); selected: root.page === "themes"; onClicked: root.page = "themes" }
+            Button { text: root.t("Visuales"); selected: root.page === "visuals"; onClicked: root.page = "visuals" }
           }
 
           Column {
@@ -265,7 +278,7 @@ Panel {
                       color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.title; font.bold: true
                     }
                     Text {
-                      text: metricCard.load < 0 ? "Sin sensor" : Math.round(metricCard.load) + "% " + (metricCard.modelData.name === "RAM" ? "en uso" : "carga")
+                      text: metricCard.load < 0 ? root.t("Sin sensor") : Math.round(metricCard.load) + "% " + (metricCard.modelData.name === "RAM" ? root.t("en uso") : root.t("carga"))
                       color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
                     }
                   }
@@ -274,11 +287,11 @@ Panel {
             }
             Text {
               width: parent.width
-              text: root.deviceData.metrics ? "RAM · " + Number(root.deviceData.metrics.ramUsedGiB || 0).toFixed(1) + " / "
-                + Number(root.deviceData.metrics.ramTotalGiB || 0).toFixed(1) + " GiB" : ""
+              text: root.deviceData.metrics ? "RAM · " + Number(root.deviceData.metrics.ramUsedGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " / "
+                + Number(root.deviceData.metrics.ramTotalGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " GiB" : ""
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
-            PanelSectionHeader { text: "EN TU TROFEO"; foreground: root.barForeground }
+            PanelSectionHeader { text: root.t("EN TU TROFEO"); foreground: root.barForeground }
             Image {
               width: parent.width
               height: width * 480 / 1280
@@ -288,7 +301,7 @@ Panel {
               asynchronous: true
             }
             Button {
-              text: "Cambiar tema…"
+              text: root.t("Cambiar tema…")
               onClicked: root.page = "themes"
             }
           }
@@ -297,9 +310,9 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
             visible: root.page === "screen" && root.ready
-            Button { text: "Reconectar USB"; enabled: !root.busy; onClicked: root.run(["reconnect"]) }
+            Button { text: root.t("Reconectar USB"); enabled: !root.busy; onClicked: root.run(["reconnect"]) }
             Text {
-              text: "Brillo · " + Math.round(brightness.value) + "%"
+              text: root.t("Brillo · ") + Math.round(brightness.value) + "%"
               color: root.barForeground
               font.family: Style.font.family
               font.pixelSize: Style.font.body
@@ -339,8 +352,8 @@ Panel {
                   onClicked: root.run(["orientation", String(modelData)])
                 }
               }
-              Button { text: "Métricas"; selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
-              Button { text: "Modo juego"; selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
+              Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
+              Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
           }
 
@@ -351,19 +364,19 @@ Panel {
             Row {
               spacing: Style.space(6)
               Button {
-                text: "Añadir tema…"
+                text: root.t("Añadir tema…")
                 enabled: !root.busy
                 onClicked: { root.close(); importDialog.open() }
               }
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: (root.deviceData.themes || []).length + " temas"
+                text: (root.deviceData.themes || []).length + root.t(" temas")
                 color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
               }
             }
             Text {
               width: parent.width
-              text: "Selecciona un tema para desplegar su vista previa."
+              text: root.t("Selecciona un tema para desplegar su vista previa.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
               wrapMode: Text.Wrap
             }
@@ -379,8 +392,8 @@ Panel {
                 required property var modelData
                 width: themeList.width
                 text: (root.expandedTheme === modelData.path ? "▾  " : "▸  ") + modelData.name
-                  + (root.lcdState.current_theme === modelData.path ? " · Activo" : "")
-                  + (modelData.custom ? " · Personalizado" : "")
+                  + (root.lcdState.current_theme === modelData.path ? root.t(" · Activo") : "")
+                  + (modelData.custom ? root.t(" · Personalizado") : "")
                 leftAlign: true
                 selected: root.expandedTheme === modelData.path
                 onClicked: root.selectTheme(modelData.path)
@@ -409,12 +422,12 @@ Panel {
                 width: parent.width
                 spacing: Style.space(6)
                 Button {
-                  text: "Aplicar en la Trofeo"
+                  text: root.t("Aplicar en la Trofeo")
                   enabled: !root.busy
                   onClicked: root.run(["theme", root.expandedTheme])
                 }
                 Button {
-                  text: "Quitar copia"
+                  text: root.t("Quitar copia")
                   visible: root.themeInfo().custom === true
                   enabled: !root.busy
                   onClicked: root.run(["remove-theme", root.expandedTheme])
@@ -423,7 +436,7 @@ Panel {
             }
             Text {
               width: parent.width
-              text: "Añade imágenes de 1280×480 o temas JSON con métricas. Se guarda una copia; tu archivo original se conserva."
+              text: root.t("Añade imágenes de 1280×480 o temas JSON con métricas. Se guarda una copia; tu archivo original se conserva.")
               wrapMode: Text.Wrap; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }
@@ -434,19 +447,19 @@ Panel {
             visible: root.page === "visuals" && root.ready
             Text {
               width: parent.width
-              text: root.deviceData.playing ? "En pantalla: " + root.deviceData.playing : "Ningún visual de audio activo"
+              text: root.deviceData.playing ? root.t("En pantalla: ") + root.deviceData.playing : root.t("Ningún visual de audio activo")
               color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; wrapMode: Text.Wrap
             }
             Flow {
               width: parent.width
               spacing: Style.space(6)
-              Button { text: "Detener"; enabled: !root.busy && !!root.deviceData.playing; onClicked: root.run(["visual", "off"]) }
-              Button { text: "Acento de Omarchy"; enabled: !root.busy && root.colourCapable; onClicked: root.run(["accent"]) }
-              Button { text: "Seguir acento"; selected: root.deviceData.followAccent === true; enabled: !root.busy; onClicked: root.run(["follow-accent", root.deviceData.followAccent ? "off" : "on"]) }
+              Button { text: root.t("Detener"); enabled: !root.busy && !!root.deviceData.playing; onClicked: root.run(["visual", "off"]) }
+              Button { text: root.t("Acento de Omarchy"); enabled: !root.busy && root.colourCapable; onClicked: root.run(["accent"]) }
+              Button { text: root.t("Seguir acento"); selected: root.deviceData.followAccent === true; enabled: !root.busy; onClicked: root.run(["follow-accent", root.deviceData.followAccent ? "off" : "on"]) }
             }
             Text {
               width: parent.width
-              text: "Los visuales reaccionan a la salida de audio, sin usar el micrófono. Seguir acento adapta el color al tema de Omarchy."
+              text: root.t("Los visuales reaccionan a la salida de audio, sin usar el micrófono. Seguir acento adapta el color al tema de Omarchy.")
               wrapMode: Text.Wrap; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             Flow {
@@ -487,11 +500,7 @@ Panel {
             width: parent.width; wrapMode: Text.Wrap
             color: Commons.Color.urgent; font.family: Style.font.family; font.pixelSize: Style.font.body
           }
-          Button { visible: !root.ready; text: "Reintentar"; enabled: !statusProc.running; onClicked: root.refresh() }
-          Text {
-            text: "v0.0.2 · Sigue el tema de Omarchy"
-            color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
-          }
+          Button { visible: !root.ready; text: root.t("Reintentar"); enabled: !statusProc.running; onClicked: root.refresh() }
         }
       }
     }

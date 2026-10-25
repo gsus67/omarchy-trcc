@@ -13,6 +13,11 @@ loader.exec_module(trofeo)
 
 
 class SocketClientTests(unittest.TestCase):
+    def setUp(self):
+        language = patch.dict("os.environ", {"LC_ALL": "en_US.UTF-8"})
+        language.start()
+        self.addCleanup(language.stop)
+
     @patch.object(trofeo.socket, "socket")
     def test_fragmented_json_and_literal_arguments(self, factory):
         client = MagicMock()
@@ -31,13 +36,13 @@ class SocketClientTests(unittest.TestCase):
     @patch.object(trofeo.socket, "socket")
     def test_eof_is_an_error(self, factory):
         factory.return_value.__enter__.return_value.recv.return_value = b""
-        with self.assertRaisesRegex(ValueError, "sin responder"):
+        with self.assertRaisesRegex(ValueError, "without a response"):
             trofeo.request("status", socket_path="/tmp/unit-test.sock")
 
     @patch.object(trofeo.socket, "socket")
     def test_response_size_is_bounded(self, factory):
         factory.return_value.__enter__.return_value.recv.return_value = b"x" * 65536
-        with self.assertRaisesRegex(ValueError, "demasiado grande"):
+        with self.assertRaisesRegex(ValueError, "too large"):
             trofeo.request("status", socket_path="/tmp/unit-test.sock")
 
 

@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 import time
+sys.dont_write_bytecode = True
+from i18n import translate as tr
 
 
 def run(*command):
@@ -23,17 +25,17 @@ def run(*command):
 def quote(value):
     value = str(value)
     if "\n" in value or "\r" in value:
-        raise ValueError("Ruta de instalación no válida.")
+        raise ValueError(tr("Ruta de instalación no válida."))
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
 def ensure(source):
     source = Path(source).resolve()
     if not (source / "manifest.json").is_file():
-        raise ValueError("No se encontró el plugin.")
+        raise ValueError(tr("No se encontró el plugin."))
     for executable in ("cmake", "g++", "pkg-config", "systemctl"):
         if not shutil.which(executable):
-            raise RuntimeError("Falta " + executable + ". Dependencias: omarchy pkg add cmake gcc pkgconf qt6-base libusb python libpulse")
+            raise RuntimeError(tr("Falta %1. Dependencias: %2", executable, "omarchy pkg add cmake gcc pkgconf qt6-base libusb python libpulse"))
     versions = run("pkg-config", "--modversion", "Qt6Core", "libusb-1.0")
     state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "omarchy-trcc"
     config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -41,7 +43,7 @@ def ensure(source):
     with (state / ".bootstrap.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         digest = hashlib.sha256(versions.encode())
-        for path in [source / "CMakeLists.txt", *sorted((source / "src").glob("*"))]:
+        for path in [source / "CMakeLists.txt", source / "i18n/messages.json", *sorted((source / "src").glob("*"))]:
             if path.is_file():
                 digest.update(path.name.encode())
                 digest.update(path.read_bytes())
@@ -65,6 +67,8 @@ def ensure(source):
             "After=graphical-session.target", "PartOf=graphical-session.target", "", "[Service]",
             "Type=simple", "ExecStart=" + quote(binary),
             "Environment=" + quote("OMARCHY_TRCC_PLUGIN_DIR=" + str(source)),
+            *["Environment=" + quote(key + "=" + os.environ[key])
+              for key in ("LANG", "LC_ALL", "LC_MESSAGES", "LC_TIME", "LC_NUMERIC") if os.environ.get(key)],
             "Environment=QT_QPA_PLATFORM=offscreen", "Restart=on-failure", "RestartSec=3",
             "UMask=0077", "NoNewPrivileges=true", "", "[Install]", "WantedBy=graphical-session.target", "",
         ])
@@ -93,7 +97,7 @@ def ensure(source):
             except OSError:
                 pass
             if time.monotonic() >= deadline:
-                raise RuntimeError("El motor no abrió su conexión. Revisa: journalctl --user -u omarchy-trcc")
+                raise RuntimeError(tr("El motor no abrió su conexión. Revisa: journalctl --user -u omarchy-trcc"))
             time.sleep(0.1)
         return {"ok": True}
 

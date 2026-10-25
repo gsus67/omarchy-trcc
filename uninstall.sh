@@ -7,10 +7,13 @@ config_root="${XDG_CONFIG_HOME:-$HOME/.config}"
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}"
 runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 systemctl --user disable --now omarchy-trcc.service 2>/dev/null || true
-omarchy plugin disable omarchy-trcc || true
-if [[ -d "$config_root/omarchy/plugins/omarchy-trcc" ]]; then
-  omarchy plugin remove omarchy-trcc --yes
-fi
+# The plugin id was omarchy-trcc before v0.0.6.
+for id in io.github.gsus67.omarchy-trcc omarchy-trcc; do
+  omarchy plugin disable "$id" 2>/dev/null || true
+  if [[ -d "$config_root/omarchy/plugins/$id" ]]; then
+    omarchy plugin remove "$id" --yes
+  fi
+done
 rm -f "$config_root/systemd/user/omarchy-trcc.service"
 systemctl --user daemon-reload
 rm -f "$runtime/omarchy-trcc.sock" "$runtime/omarchy-trcc.sock.lock"

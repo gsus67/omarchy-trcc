@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.5
+# omarchy-trcc · v0.0.6
 
 **English** · [Español](README.es.md)
 
@@ -36,7 +36,7 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 
 ## Compatibility
 
-v0.0.5 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
+v0.0.6 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
 checks the panel identity on connect and rejects other geometries. It is not
 compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
 shares the USB ID.
@@ -75,13 +75,13 @@ install packages automatically, does not use sudo and does not modify
 To update:
 
 ```sh
-omarchy plugin update omarchy-trcc
+omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
 If USB permission is missing, run from a terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
 ```
 
 That optional step asks for sudo to install a `uaccess` rule limited to
@@ -95,9 +95,9 @@ Click **🖥 TR** to open/close the panel. From a terminal:
 ```sh
 omarchy-shell omarchy-trcc open
 omarchy-shell omarchy-trcc view visuals
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo status
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo theme focus
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo visual bars
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo status
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo theme focus
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo visual bars
 systemctl --user status omarchy-trcc
 ```
 
@@ -119,7 +119,7 @@ edit its name/text/positions and add it from the picker. You can also import it
 from a terminal:
 
 ```sh
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo import-theme /path/to/my-theme.json
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo import-theme /path/to/my-theme.json
 ```
 
 The format uses `schema: 1`, `width: 1280`, `height: 480`, a `name` and an
@@ -143,9 +143,9 @@ code. They are not TRCC `.dc` themes.
 
 The install uses only:
 
-- `~/.config/omarchy/plugins/omarchy-trcc/` (checkout managed by Omarchy)
+- `~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/` (checkout managed by Omarchy)
 - `~/.config/systemd/user/omarchy-trcc.service` and its enable link
-- An `omarchy-trcc` entry in the bar in `shell.json`
+- An `io.github.gsus67.omarchy-trcc` entry in the bar in `shell.json`
 - `~/.local/state/omarchy-trcc/` for settings, imported themes, previews and a
   single live image that gets overwritten
 - Temporary socket/lock in `$XDG_RUNTIME_DIR`
@@ -158,9 +158,9 @@ plugin removal also removes the engine and its user unit, keeping your settings
 and custom themes.
 
 ```sh
-omarchy plugin remove omarchy-trcc
+omarchy plugin remove io.github.gsus67.omarchy-trcc
 # Alternative that also deletes your settings and imported themes:
-bash ~/.config/omarchy/plugins/omarchy-trcc/uninstall.sh --purge
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/uninstall.sh --purge
 ```
 
 It does not remove shared dependencies, TRCC settings or other plugins. When the

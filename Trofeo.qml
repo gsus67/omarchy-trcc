@@ -9,7 +9,7 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "omarchy-trcc"
+  moduleName: "io.github.gsus67.omarchy-trcc"
   ipcTarget: "omarchy-trcc"
   manageIpc: false
   readonly property string backend: decodeURIComponent(String(Qt.resolvedUrl("bin/trofeo")).replace(/^file:\/\//, ""))

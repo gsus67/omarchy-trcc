@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.5
+# omarchy-trcc · v0.0.6
 
 [English](README.md) · **Español**
 
@@ -22,7 +22,7 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ## Compatibilidad
 
-v0.0.5 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+v0.0.6 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
 Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 
@@ -41,13 +41,13 @@ Al activarlo por primera vez, el plugin compila automáticamente su motor y prep
 Para actualizar:
 
 ```sh
-omarchy plugin update omarchy-trcc
+omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
 Si falta permiso USB, ejecuta desde una terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
 ```
 
 Ese paso opcional solicita sudo para instalar una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
@@ -59,9 +59,9 @@ Pulsa **🖥 TR** para abrir/cerrar el panel. Desde una terminal:
 ```sh
 omarchy-shell omarchy-trcc open
 omarchy-shell omarchy-trcc view visuals
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo status
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo theme focus
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo visual bars
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo status
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo theme focus
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo visual bars
 systemctl --user status omarchy-trcc
 ```
 
@@ -74,7 +74,7 @@ En **Temas → Añadir tema…**, selecciona una imagen PNG/JPG/WebP de **1280×
 Para crear un panel con métricas, copia [examples/mi-tema.json](examples/mi-tema.json), edita su nombre/textos/posiciones y añádelo desde el selector. También puedes importarlo desde la terminal:
 
 ```sh
-python ~/.config/omarchy/plugins/omarchy-trcc/bin/trofeo import-theme /ruta/a/mi-tema.json
+python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo import-theme /ruta/a/mi-tema.json
 ```
 
 El formato usa `schema: 1`, `width: 1280`, `height: 480`, un `name` y una lista `elements`. Cada elemento `type: "text"` define `text`, `x`, `y`, `width`, `height` y `fontSize`; admite `bold`, `align` (`left`, `center`, `right`) y `color`. Los colores pueden ser `background`, `foreground`, `accent`, `muted`, `green` (siguen Omarchy) o `#RRGGBB`.
@@ -87,9 +87,9 @@ Opcionalmente, `background` indica una imagen de 1280×480 dentro de la misma ca
 
 La instalación usa únicamente:
 
-- `~/.config/omarchy/plugins/omarchy-trcc/` (checkout administrado por Omarchy)
+- `~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/` (checkout administrado por Omarchy)
 - `~/.config/systemd/user/omarchy-trcc.service` y su enlace de activación
-- Una entrada `omarchy-trcc` en la barra de `shell.json`
+- Una entrada `io.github.gsus67.omarchy-trcc` en la barra de `shell.json`
 - `~/.local/state/omarchy-trcc/` para ajustes, temas importados, vistas previas y una única imagen en vivo que se sobrescribe
 - Socket/bloqueo temporales en `$XDG_RUNTIME_DIR`
 - Opcionalmente, `/etc/udev/rules.d/70-omarchy-trcc.rules` si ejecutaste `setup-usb.sh`
@@ -97,9 +97,9 @@ La instalación usa únicamente:
 Respeta `XDG_CONFIG_HOME` y `XDG_STATE_HOME`. El binario compilado queda en `~/.local/state/omarchy-trcc/bin/`; la compilación temporal se borra. La eliminación normal del plugin también retira el motor y su unidad de usuario, conservando tus ajustes y temas personalizados.
 
 ```sh
-omarchy plugin remove omarchy-trcc
+omarchy plugin remove io.github.gsus67.omarchy-trcc
 # Alternativa para borrar también tus ajustes y temas importados:
-bash ~/.config/omarchy/plugins/omarchy-trcc/uninstall.sh --purge
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/uninstall.sh --purge
 ```
 
 No elimina dependencias compartidas, configuraciones de TRCC ni otros plugins. Al detener el motor la pantalla conserva la última imagen enviada.

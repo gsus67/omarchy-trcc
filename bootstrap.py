@@ -6,9 +6,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 
 
 def run(*command):
@@ -76,6 +78,23 @@ def ensure(source):
         run("systemctl", "--user", "enable", "--now", "omarchy-trcc.service")
         if changed or unit_changed:
             run("systemctl", "--user", "restart", "omarchy-trcc.service")
+        # systemd reports a Type=simple service active before Qt has opened
+        # its socket. Don't tell the panel it's ready until it really replies.
+        runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(3)
+                    client.connect(str(runtime / "omarchy-trcc.sock"))
+                    client.sendall(b'{"command":"status"}\n')
+                    if client.recv(64).startswith(b'{'):
+                        break
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise RuntimeError("El motor no abrió su conexión. Revisa: journalctl --user -u omarchy-trcc")
+            time.sleep(0.1)
         return {"ok": True}
 
 

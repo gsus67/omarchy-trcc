@@ -2,7 +2,7 @@
 
 Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB propio en C++/Qt: **no requiere instalar ni ejecutar TRCC**.
 
-![Focus con Tokyo Night](assets/focus.png)
+![Panel actual de omarchy-trcc con datos en vivo](preview.png)
 
 ## Funciones
 

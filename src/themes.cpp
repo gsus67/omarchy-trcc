@@ -1,6 +1,6 @@
-#include "i18n.h"
+#include "i18n.hpp"
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "themes.h"
+#include "themes.hpp"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>

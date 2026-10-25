@@ -1,4 +1,4 @@
-#include "i18n.h"
+#include "i18n.hpp"
 // SPDX-License-Identifier: GPL-3.0-or-later
 // HID Type 2 protocol attribution: see NOTICE.md.
 #include <QGuiApplication>
@@ -33,7 +33,7 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
-#include "themes.h"
+#include "themes.hpp"
 
 static constexpr int W = 1280, H = 480;
 static const QStringList layouts = {"focus", "terminal", "rings", "dots"};

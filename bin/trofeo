@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""JSON CLI client for the standalone omarchy-trcc engine (no TRCC dependency)."""
+import argparse
+import json
+import os
+from pathlib import Path
+import socket
+import sys
+
+COMMANDS = ("status", "brightness", "orientation", "theme", "overlay", "game",
+            "visual", "accent", "follow-accent", "reconnect")
+
+
+def request(command, args=(), socket_path=None):
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+    path = socket_path or runtime / "omarchy-trcc.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(20)
+        try:
+            client.connect(str(path))
+        except (FileNotFoundError, ConnectionRefusedError) as error:
+            raise ValueError("El motor está detenido. Ejecuta: systemctl --user start omarchy-trcc") from error
+        client.sendall(json.dumps({"command": command, "args": list(args)}).encode() + b"\n")
+        received = bytearray()
+        while b"\n" not in received:
+            chunk = client.recv(65536)
+            if not chunk:
+                raise ValueError("El motor cerró la conexión sin responder.")
+            received.extend(chunk)
+            if len(received) > 1_000_000:
+                raise ValueError("Respuesta demasiado grande.")
+        return json.loads(received.split(b"\n", 1)[0])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--device", default="0416:5302")
+    parser.add_argument("command", choices=COMMANDS)
+    parser.add_argument("args", nargs="*")
+    options = parser.parse_args()
+    try:
+        if options.device != "0416:5302":
+            raise ValueError("v0.0.1 solo admite Trofeo 1280×480, USB 0416:5302.")
+        result = request(options.command, options.args)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result.get("ok") else 1
+    except (ValueError, OSError) as error:
+        print(json.dumps({"ok": False, "message": str(error)}, ensure_ascii=False))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "omarchy-trcc",
+  "name": "Omarchy TRCC",
+  "version": "0.0.1",
+  "author": "gsus",
+  "license": "GPL-3.0-or-later",
+  "description": "Control nativo de la Trofeo Vision sin TRCC: temas, métricas y visuales sincronizados con Omarchy.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "Trofeo.qml"},
+  "barWidget": {
+    "displayName": "Omarchy TRCC",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {"device": "0416:5302"},
+    "schema": [{"key": "device", "type": "string", "label": "USB device key"}]
+  }
+}

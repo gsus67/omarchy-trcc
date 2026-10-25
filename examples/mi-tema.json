@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "Mi panel",
+  "width": 1280,
+  "height": 480,
+  "backgroundColor": "background",
+  "elements": [
+    {"type":"text","text":"MI TROFEO / {theme}","x":40,"y":20,"width":1200,"height":60,"fontSize":28,"color":"accent","bold":true},
+    {"type":"text","text":"CPU {cpu_temp}°C · {cpu_load}%","x":40,"y":120,"width":1200,"height":80,"fontSize":52,"color":"foreground"},
+    {"type":"text","text":"GPU {gpu_temp}°C · {gpu_load}%","x":40,"y":210,"width":1200,"height":80,"fontSize":52,"color":"foreground"},
+    {"type":"text","text":"RAM {ram_temp}°C · {ram}%","x":40,"y":300,"width":1200,"height":70,"fontSize":42,"color":"foreground"},
+    {"type":"text","text":"{date} · {time}","x":40,"y":400,"width":1200,"height":50,"fontSize":28,"color":"muted","align":"right"}
+  ]
+}

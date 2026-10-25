@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Dialogs as Dialogs
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -12,6 +13,7 @@ Panel {
   ipcTarget: "omarchy-trcc"
   manageIpc: false
   readonly property string backend: decodeURIComponent(String(Qt.resolvedUrl("bin/trofeo")).replace(/^file:\/\//, ""))
+  readonly property string pluginDirectory: backend.replace(/\/bin\/trofeo$/, "")
   readonly property string device: String(setting("device", "0416:5302"))
   property var deviceData: ({})
   readonly property var lcdState: deviceData.state || ({})
@@ -24,8 +26,10 @@ Panel {
   property string actionError: ""
   property string statusOutput: ""
   property string statusError: ""
-  property string page: "screen"
+  property string page: "live"
   property string selectedVisual: ""
+  property string expandedTheme: ""
+  property string operationError: ""
   property bool initialized: false
 
   function refresh() {
@@ -46,8 +50,18 @@ Panel {
     actionOutput = ""
     actionError = ""
     error = ""
+    operationError = ""
     actionProc.command = ["python3", backend, "--device", device].concat(args)
     actionProc.running = true
+  }
+  function themeInfo() {
+    var entries = deviceData.themes || []
+    for (var i = 0; i < entries.length; i++)
+      if (entries[i].path === expandedTheme) return entries[i]
+    return ({})
+  }
+  function selectTheme(id) {
+    expandedTheme = expandedTheme === id ? "" : id
   }
   function selectedInfo() {
     var entries = deviceData.visuals || []
@@ -57,7 +71,7 @@ Panel {
   }
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
-  Component.onCompleted: { initialized = true; refresh() }
+  Component.onCompleted: { initialized = true; bootstrapProc.running = true }
   onOpenedChanged: if (opened) refresh()
   onDeviceChanged: if (initialized) { deviceData = ({}); refresh() }
 
@@ -68,11 +82,12 @@ Panel {
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
     function view(name: string): void {
-      if (name === "screen" || name === "visuals") { root.page = name; root.open() }
+      if (name === "live" || name === "screen" || name === "themes" || name === "visuals") { root.page = name; root.open() }
     }
+    function preview(id: string): void { root.expandedTheme = id; root.page = "themes"; root.open() }
     function status(): string {
       return JSON.stringify({ready: root.ready, error: root.error, busy: root.busy,
-        page: root.page, accent: String(Commons.Color.accent),
+        page: root.page, expandedTheme: root.expandedTheme, accent: String(Commons.Color.accent),
         background: String(Commons.Color.background),
         theme: root.lcdState.current_theme || "", playing: root.deviceData.playing || ""})
     }
@@ -82,7 +97,21 @@ Panel {
     target: Commons.Color
     function onAccentChanged() { if (root.opened) root.refresh() }
   }
-  Timer { interval: 5000; repeat: true; running: root.opened; onTriggered: root.refresh() }
+  Timer { interval: 2000; repeat: true; running: root.opened; onTriggered: root.refresh() }
+
+  Process {
+    id: bootstrapProc
+    command: ["python3", root.pluginDirectory + "/bootstrap.py", root.pluginDirectory]
+    property string resultText: ""
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: bootstrapProc.resultText = text }
+    onExited: function(code) {
+      try {
+        var result = JSON.parse(resultText)
+        if (!result.ok) { root.operationError = result.message; root.error = result.message }
+      } catch (e) { root.operationError = "No se pudo preparar el motor"; root.error = root.operationError }
+      root.refresh()
+    }
+  }
 
   Process {
     id: statusProc
@@ -95,10 +124,11 @@ Panel {
         if (!result.ok) throw new Error(result.message || "El motor no respondió")
         root.deviceData = result
         if (root.selectedVisual === "") root.selectedVisual = result.playing || "bars"
-        root.error = result.deviceError || result.audioError || ""
+        root.error = root.operationError || result.deviceError || result.audioError || ""
+        if (root.expandedTheme !== "" && !root.themeInfo().path) root.expandedTheme = ""
       } catch (e) {
         root.deviceData = ({})
-        root.error = root.statusError.trim() || String(e)
+        root.error = root.operationError || root.statusError.trim() || String(e)
       }
       Qt.callLater(root.pump)
     }
@@ -110,8 +140,14 @@ Panel {
     onExited: function(code) {
       try {
         var result = JSON.parse(root.actionOutput)
-        if (code !== 0 || !result.ok) root.error = result.message || "No se pudo aplicar el cambio"
-      } catch (e) { root.error = root.actionError.trim() || "El motor no pudo completar la acción" }
+        if (code !== 0 || !result.ok) {
+          root.operationError = result.message || "No se pudo aplicar el cambio"
+          root.error = root.operationError
+        } else if (result.themeId) {
+          root.expandedTheme = result.themeId
+          root.page = "themes"
+        }
+      } catch (e) { root.operationError = root.actionError.trim() || "El motor no pudo completar la acción"; root.error = root.operationError }
       root.refresh()
       Qt.callLater(root.pump)
     }
@@ -123,7 +159,21 @@ Panel {
     bar: root.bar
     text: "󰍹 TR"
     tooltipText: "Omarchy TRCC · Thermalright Trofeo"
-    onPressed: function(mouseButton) { if (mouseButton === Qt.LeftButton) root.toggle() }
+    onPressed: function(mouseButton) { if (mouseButton === Qt.LeftButton) { if (!root.opened) root.page = "live"; root.toggle() } }
+  }
+
+  Dialogs.FileDialog {
+    id: importDialog
+    title: "Añadir tema a Omarchy TRCC"
+    fileMode: Dialogs.FileDialog.OpenFile
+    nameFilters: ["Temas e imágenes (*.json *.png *.jpg *.jpeg *.webp)", "Todos los archivos (*)"]
+    onAccepted: {
+      var filePath = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
+      root.run(["import-theme", filePath])
+      root.page = "themes"
+      root.open()
+    }
+    onRejected: { root.page = "themes"; root.open() }
   }
 
   KeyboardPanel {
@@ -162,7 +212,7 @@ Panel {
           }
           Text {
             width: parent.width
-            text: (root.ready ? root.deviceData.resolution + " · " + (root.deviceData.usbPresent ? "USB conectado" : "USB no detectado") : "Conectando con el motor…") + (root.busy ? " · Aplicando…" : "")
+            text: (root.ready ? root.deviceData.resolution + " · " + (root.deviceData.usbPresent ? "USB conectado" : "USB no detectado") : (bootstrapProc.running ? "Preparando el motor…" : "Conectando con el motor…")) + (root.busy ? " · Aplicando…" : "")
             color: Commons.Color.muted
             font.family: Style.font.family
             font.pixelSize: Style.font.body
@@ -171,15 +221,83 @@ Panel {
           PanelSeparator { foreground: root.barForeground }
           Row {
             spacing: Style.space(6)
+            Button { text: "Inicio"; selected: root.page === "live"; onClicked: root.page = "live" }
             Button { text: "Pantalla"; selected: root.page === "screen"; onClicked: root.page = "screen" }
+            Button { text: "Temas"; selected: root.page === "themes"; onClicked: root.page = "themes" }
             Button { text: "Visuales"; selected: root.page === "visuals"; onClicked: root.page = "visuals" }
-            Button { text: "Reconectar"; enabled: !root.busy; onClicked: root.run(["reconnect"]) }
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(12)
+            visible: root.page === "live" && root.ready
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+              Repeater {
+                model: [
+                  {name: "CPU", temperature: "cpuTemp", load: "cpu"},
+                  {name: "GPU", temperature: "gpuTemp", load: "gpu"},
+                  {name: "RAM", temperature: "ramTemp", load: "ram"}
+                ]
+                Rectangle {
+                  id: metricCard
+                  required property var modelData
+                  readonly property var readings: root.deviceData.metrics || ({})
+                  readonly property real temperature: readings[modelData.temperature] === undefined ? -1 : readings[modelData.temperature]
+                  readonly property real load: readings[modelData.load] === undefined ? -1 : readings[modelData.load]
+                  width: (parent.width - parent.spacing * 2) / 3
+                  height: Style.space(115)
+                  radius: Style.cornerRadius
+                  color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.08)
+                  border.color: Commons.Color.muted
+                  border.width: Math.max(1, Style.space(1))
+                  Column {
+                    anchors.fill: parent
+                    anchors.margins: Style.space(10)
+                    spacing: Style.space(5)
+                    Text {
+                      text: metricCard.modelData.name
+                      color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                    }
+                    Text {
+                      text: metricCard.temperature < 0 ? "—" : Math.round(metricCard.temperature) + "°C"
+                      color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.title; font.bold: true
+                    }
+                    Text {
+                      text: metricCard.load < 0 ? "Sin sensor" : Math.round(metricCard.load) + "% " + (metricCard.modelData.name === "RAM" ? "en uso" : "carga")
+                      color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                    }
+                  }
+                }
+              }
+            }
+            Text {
+              width: parent.width
+              text: root.deviceData.metrics ? "RAM · " + Number(root.deviceData.metrics.ramUsedGiB || 0).toFixed(1) + " / "
+                + Number(root.deviceData.metrics.ramTotalGiB || 0).toFixed(1) + " GiB" : ""
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
+            PanelSectionHeader { text: "EN TU TROFEO"; foreground: root.barForeground }
+            Image {
+              width: parent.width
+              height: width * 480 / 1280
+              source: root.deviceData.livePreview ? root.deviceData.livePreview + "?frame=" + root.deviceData.previewRevision : ""
+              cache: false
+              fillMode: Image.PreserveAspectFit
+              asynchronous: true
+            }
+            Button {
+              text: "Cambiar tema…"
+              onClicked: root.page = "themes"
+            }
           }
 
           Column {
             width: parent.width
             spacing: Style.space(10)
             visible: root.page === "screen" && root.ready
+            Button { text: "Reconectar USB"; enabled: !root.busy; onClicked: root.run(["reconnect"]) }
             Text {
               text: "Brillo · " + Math.round(brightness.value) + "%"
               color: root.barForeground
@@ -224,37 +342,89 @@ Panel {
               Button { text: "Métricas"; selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: "Modo juego"; selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
-            PanelSectionHeader { text: "TEMAS COMPATIBLES"; foreground: root.barForeground }
-            Text {
-              visible: (root.deviceData.themes || []).length === 0
-              text: "No hay temas locales compatibles con esta resolución."
-              width: parent.width; wrapMode: Text.Wrap
-              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+            visible: root.page === "themes" && root.ready
+            Row {
+              spacing: Style.space(6)
+              Button {
+                text: "Añadir tema…"
+                enabled: !root.busy
+                onClicked: { root.close(); importDialog.open() }
+              }
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: (root.deviceData.themes || []).length + " temas"
+                color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+              }
             }
-            Repeater {
+            Text {
+              width: parent.width
+              text: "Selecciona un tema para desplegar su vista previa."
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+              wrapMode: Text.Wrap
+            }
+            ListView {
+              id: themeList
+              width: parent.width
+              height: Math.min(contentHeight, Style.space(190))
+              clip: true
+              spacing: Style.space(4)
+              boundsBehavior: Flickable.StopAtBounds
               model: root.deviceData.themes || []
-              Column {
-                id: themeCard
+              delegate: Button {
                 required property var modelData
-                width: column.width
-                spacing: Style.space(4)
-                Image {
-                  width: parent.width
-                  height: width * 480 / 1280
-                  source: parent.modelData.preview + "?palette=" + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "")
-                  cache: false
-                  fillMode: Image.PreserveAspectFit
-                  asynchronous: true
-                  MouseArea { anchors.fill: parent; enabled: !root.busy; cursorShape: Qt.PointingHandCursor; onClicked: root.run(["theme", themeCard.modelData.path]) }
+                width: themeList.width
+                text: (root.expandedTheme === modelData.path ? "▾  " : "▸  ") + modelData.name
+                  + (root.lcdState.current_theme === modelData.path ? " · Activo" : "")
+                  + (modelData.custom ? " · Personalizado" : "")
+                leftAlign: true
+                selected: root.expandedTheme === modelData.path
+                onClicked: root.selectTheme(modelData.path)
+              }
+              Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
+            }
+            Column {
+              width: parent.width
+              spacing: Style.space(8)
+              visible: !!root.themeInfo().path
+              PanelSeparator { foreground: root.barForeground }
+              Text {
+                text: root.themeInfo().name || ""
+                color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+              Image {
+                width: parent.width
+                height: width * 480 / 1280
+                source: root.themeInfo().preview ? root.themeInfo().preview + "?palette="
+                  + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "") : ""
+                cache: false
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+              }
+              Flow {
+                width: parent.width
+                spacing: Style.space(6)
+                Button {
+                  text: "Aplicar en la Trofeo"
+                  enabled: !root.busy
+                  onClicked: root.run(["theme", root.expandedTheme])
                 }
                 Button {
-                  width: parent.width
-                  text: parent.modelData.name + (selected ? " · Activo" : " · Aplicar")
-                  selected: root.lcdState.current_theme === parent.modelData.path
+                  text: "Quitar copia"
+                  visible: root.themeInfo().custom === true
                   enabled: !root.busy
-                  onClicked: root.run(["theme", parent.modelData.path])
+                  onClicked: root.run(["remove-theme", root.expandedTheme])
                 }
               }
+            }
+            Text {
+              width: parent.width
+              text: "Añade imágenes de 1280×480 o temas JSON con métricas. Se guarda una copia; tu archivo original se conserva."
+              wrapMode: Text.Wrap; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }
 
@@ -319,7 +489,7 @@ Panel {
           }
           Button { visible: !root.ready; text: "Reintentar"; enabled: !statusProc.running; onClicked: root.refresh() }
           Text {
-            text: "v0.0.1 · Sigue el tema de Omarchy"
+            text: "v0.0.2 · Sigue el tema de Omarchy"
             color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
           }
         }

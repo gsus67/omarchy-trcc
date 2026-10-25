@@ -14,6 +14,8 @@ fi
 rm -f "$config_root/systemd/user/omarchy-trcc.service"
 systemctl --user daemon-reload
 rm -f "$runtime/omarchy-trcc.sock" "$runtime/omarchy-trcc.sock.lock"
+rm -f "$state_root/omarchy-trcc/bin/trofeo-engine" "$state_root/omarchy-trcc/.engine-version" "$state_root/omarchy-trcc/.bootstrap.lock"
+rmdir "$state_root/omarchy-trcc/bin" 2>/dev/null || true
 if $purge; then
   rm -rf -- "$state_root/omarchy-trcc"
   if [[ -f /etc/udev/rules.d/70-omarchy-trcc.rules ]]; then

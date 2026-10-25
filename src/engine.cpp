@@ -31,6 +31,7 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include "themes.h"
 
 static constexpr int W = 1280, H = 480;
 static const QStringList layouts = {"focus", "terminal", "rings", "dots"};
@@ -162,7 +163,7 @@ public:
 };
 
 struct Metrics {
-    double cpu = 0, gpu = -1, cpuTemp = -1, gpuTemp = -1, ram = 0;
+    double cpu = 0, gpu = -1, cpuTemp = -1, gpuTemp = -1, ramTemp = -1, ram = 0, ramUsedGiB = 0, ramTotalGiB = 0;
     quint64 previousTotal = 0, previousIdle = 0;
     void sample() {
         auto fields = readText("/proc/stat").section('\n', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
@@ -175,7 +176,8 @@ struct Metrics {
         QRegularExpression available("MemAvailable:\\s+(\\d+)"), memTotal("MemTotal:\\s+(\\d+)");
         double t = memTotal.match(memory).captured(1).toDouble(), a = available.match(memory).captured(1).toDouble();
         ram = t > 0 ? (t-a)*100/t : 0;
-        cpuTemp = -1; gpuTemp = -1; gpu = -1;
+        ramTotalGiB=t/1048576.0; ramUsedGiB=(t-a)/1048576.0;
+        cpuTemp = -1; gpuTemp = -1; ramTemp = -1; gpu = -1;
         for (const QString &name : QDir("/sys/class/hwmon").entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
             QString path = "/sys/class/hwmon/" + name;
             QString driver = readText(path + "/name");
@@ -186,6 +188,10 @@ struct Metrics {
             if (driver == "amdgpu" || driver == "nouveau") {
                 QString value = readText(path + "/temp1_input");
                 if (!value.isEmpty()) gpuTemp = value.toDouble() / 1000;
+            }
+            if(driver=="spd5118"||driver=="jc42") {
+                QString value=readText(path+"/temp1_input");
+                if(!value.isEmpty()) ramTemp=std::max(ramTemp,value.toDouble()/1000.0);
             }
         }
         for (const QString &card : QDir("/sys/class/drm").entryList({"card*"}, QDir::Dirs)) {
@@ -218,6 +224,7 @@ public:
     Usb usb;
     Metrics metrics;
     Palette palette;
+    ThemeStore customThemes;
     QJsonObject settings;
     QString stateDir, socketPath;
     QLocalServer server;
@@ -232,13 +239,14 @@ public:
     Engine(bool off = false) : offline(off) {
         stateDir = QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation) + "/omarchy-trcc";
         QDir().mkpath(stateDir + "/previews");
+        customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
                     {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
-        if (!layouts.contains(settings["layout"].toString())) settings["layout"] = "focus";
+        if (!layouts.contains(settings["layout"].toString())&&!customThemes.contains(settings["layout"].toString())) settings["layout"] = "focus";
         if (!visualIds.contains(settings["visual"].toString())) settings["visual"] = "";
         settings["brightness"] = std::clamp(settings["brightness"].toInt(100), 0, 100);
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
@@ -300,7 +308,38 @@ public:
         QPainter painter(&image); painter.setRenderHint(QPainter::Antialiasing);
         // Draw on a fixed design coordinate system; portrait stays readable
         // using a stacked layout before wire rotation.
-        if (portrait) {
+        if (audioVisual.isEmpty()&&customThemes.contains(layout)) {
+            CustomTheme theme=customThemes.get(layout);
+            auto color=[&](QString role) {
+                if(role=="background") return palette.background;
+                if(role=="foreground") return palette.foreground;
+                if(role=="accent") return palette.accent;
+                if(role=="muted") return palette.muted;
+                if(role=="green") return palette.green;
+                return QColor(role);
+            };
+            painter.fillRect(image.rect(),color(theme.spec["backgroundColor"].toString("background")));
+            painter.scale(image.width()/double(W),image.height()/double(H));
+            if(!theme.backgroundPath.isEmpty()) painter.drawImage(QRect(0,0,W,H),QImage(theme.backgroundPath));
+            const QMap<QString,QString> tokens={
+                {"cpu_temp",metrics.cpuTemp<0?"—":QString::number(qRound(metrics.cpuTemp))},
+                {"gpu_temp",metrics.gpuTemp<0?"—":QString::number(qRound(metrics.gpuTemp))},
+                {"cpu_load",QString::number(qRound(metrics.cpu))},
+                {"gpu_load",metrics.gpu<0?"—":QString::number(qRound(metrics.gpu))},
+                {"ram",QString::number(qRound(metrics.ram))},
+                {"ram_temp",metrics.ramTemp<0?"—":QString::number(qRound(metrics.ramTemp))},
+                {"time",QTime::currentTime().toString("HH:mm")},
+                {"date",QDate::currentDate().toString("dd MMM yyyy")},{"theme",palette.name}};
+            for(auto item:theme.spec["elements"].toArray()) {
+                QJsonObject e=item.toObject(); QString value=e["text"].toString();
+                for(auto it=tokens.begin();it!=tokens.end();++it) value.replace("{"+it.key()+"}",it.value());
+                int align=Qt::AlignVCenter;
+                QString horizontal=e["align"].toString("left");
+                align|=horizontal=="center"?Qt::AlignHCenter:(horizontal=="right"?Qt::AlignRight:Qt::AlignLeft);
+                text(painter,{e["x"].toDouble(),e["y"].toDouble(),e["width"].toDouble(),e["height"].toDouble()},value,e["fontSize"].toInt(),color(e["color"].toString("foreground")),e["bold"].toBool(),align);
+            }
+            painter.resetTransform();
+        } else if (portrait) {
             text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
             text(painter, {30,85,420,40}, palette.name, 20, palette.muted);
             const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
@@ -379,7 +418,7 @@ public:
                 text(painter,{x,350,290,50},details[i],18,palette.muted);
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
-            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.1",16,palette.muted);
+            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.2",16,palette.muted);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));
@@ -387,31 +426,50 @@ public:
     }
     void previews() {
         for (const QString &layout : layouts) render(layout, "", true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+layout+".png");
+        for(const auto &theme:customThemes.all()) render(theme.id,"",true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+theme.id+".png");
     }
     QJsonObject status() {
+        QSaveFile liveFile(stateDir+"/live.png");
+        if(liveFile.open(QIODevice::WriteOnly)) {
+            if(render(settings["layout"].toString(),settings["game"].toBool()&&metrics.cpu>75?QString():visual(),true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(&liveFile,"PNG")) liveFile.commit();
+            else liveFile.cancelWriting();
+        }
         QJsonArray themes, visuals;
         const QStringList names = {"Focus", "Terminal", "Rings", "Dots"};
-        for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
+        for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
+        for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",id.left(1).toUpper()+id.mid(1)},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
             {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
+            {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
-            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ram",metrics.ram}}}};
+            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB}}}};
     }
     QJsonObject command(const QJsonObject &request) {
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
         QString value=args.isEmpty()?QString():args[0].toString();
         if(op=="status") return status();
         auto invalid=[] { return QJsonObject{{"ok",false},{"message","Acción o valor no válido"}}; };
+        if(op=="import-theme"&&args.size()==1) {
+            auto result=customThemes.importFile(value);
+            if(result["ok"].toBool()) previews();
+            return result;
+        }
+        if(op=="remove-theme"&&args.size()==1) {
+            if(!customThemes.remove(value)) return invalid();
+            QFile::remove(stateDir+"/previews/"+value+".png");
+            if(settings["layout"].toString()==value) { settings["layout"]="focus"; lastFrame=0; }
+            save(); return {{"ok",true},{"message","Tema eliminado de la biblioteca."}};
+        }
         if(op=="brightness") {
             bool ok; int n=value.toInt(&ok); if(!ok||n<0||n>100) return invalid(); settings["brightness"]=n;
         } else if(op=="orientation") {
             bool ok; int n=value.toInt(&ok); if(!ok||!QList<int>{0,90,180,270}.contains(n)) return invalid(); settings["orientation"]=n;
         } else if(op=="theme") {
-            if(!layouts.contains(value)) return invalid();
+            if(!layouts.contains(value)&&!customThemes.contains(value)) return invalid();
             settings["layout"]=value; settings["visual"]="";
         } else if(op=="visual") {
             if(value!="off"&&!visualIds.contains(value)) return invalid();
@@ -431,6 +489,22 @@ public:
     void tick() {
         qint64 now=QDateTime::currentMSecsSinceEpoch();
         if(now-lastSample>=1000) {
+            QString plugin=qEnvironmentVariable("OMARCHY_TRCC_PLUGIN_DIR");
+            if(!plugin.isEmpty()&&!QFileInfo::exists(plugin+"/manifest.json")) {
+                // `omarchy plugin remove` deletes the checkout. Remove only
+                // our runtime/unit; preserve user settings and custom themes.
+                QProcess::execute("systemctl",{"--user","disable","omarchy-trcc.service"});
+                QString config=qEnvironmentVariable("XDG_CONFIG_HOME",QDir::homePath()+"/.config");
+                QFile::remove(config+"/systemd/user/omarchy-trcc.service");
+                QProcess::startDetached("systemctl",{"--user","daemon-reload"});
+                QFile::remove(stateDir+"/bin/trofeo-engine");
+                QDir(stateDir).rmdir("bin");
+                QFile::remove(stateDir+"/.engine-version");
+                QFile::remove(stateDir+"/.bootstrap.lock");
+                QFile::remove(socketPath+".lock");
+                server.close(); QLocalServer::removeServer(socketPath);
+                QCoreApplication::quit(); return;
+            }
             QString oldPalette=palette.name+palette.accent.name()+palette.background.name()+palette.foreground.name();
             palette.load(); metrics.sample(); lastSample=now;
             if(oldPalette!=palette.name+palette.accent.name()+palette.background.name()+palette.foreground.name()) previews();

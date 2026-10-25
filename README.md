@@ -47,10 +47,11 @@ Temperatures come from hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`,
 shows the highest available value. Power draw in watts is read without root.
 The PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon
 `corsairpsu`), a laptop battery while discharging, or CPU + GPU. GPU power
-comes from `amdgpu`/`nouveau` (all GPUs are added). CPU power comes from
-`zenpower` (cores + SoC) or the RAPL counter when the system lets users read
-it; the kernel keeps it root-only by default, in which case the CPU shows `—`
-and the total shows as `≥ X W`. CPU + GPU leaves out the board, drives and PSU
+comes from `amdgpu`/`nouveau` (all GPUs are added). CPU power comes from the
+RAPL counter or the `zenpower` module (cores + SoC; not shipped with Omarchy),
+only when the system already lets users read them. The kernel keeps RAPL
+root-only for security and the plugin never changes permissions, so the CPU
+usually shows `—` and the total shows as `≥ X W`. CPU + GPU leaves out the board, drives and PSU
 losses. Proprietary NVIDIA telemetry is not included yet. This version draws
 its own layouts and visuals; it does not import TRCC `.dc` themes, KarmaViz
 shaders or presets.

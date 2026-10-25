@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import shutil
 import socket
@@ -44,6 +45,11 @@ def ensure(source):
     state.mkdir(parents=True, exist_ok=True)
     with (state / ".bootstrap.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        # A shell restart can terminate bootstrap during compilation. Only
+        # the lock owner can build, so any pre-existing build folder is stale.
+        for stale in state.glob("build-*"):
+            if stale.is_dir() and not stale.is_symlink():
+                shutil.rmtree(stale)
         digest = hashlib.sha256(b"direct-cxx-v1\n" + versions.encode())
         for path in [source / "native_build.py", source / "i18n/messages.json", *sorted((source / "src").glob("*"))]:
             if path.is_file():
@@ -104,6 +110,12 @@ def ensure(source):
 
 
 if __name__ == "__main__":
+    def terminate(signum, frame):
+        # Unwind TemporaryDirectory on ordinary shutdown instead of leaving
+        # compiler output behind when Quickshell reloads the widget.
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, terminate)
     try:
         print(json.dumps(ensure(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).parent), ensure_ascii=False))
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:

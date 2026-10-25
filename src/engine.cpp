@@ -24,6 +24,7 @@
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QTimer>
 #include <QtEndian>
 #include <QUrl>
@@ -166,40 +167,112 @@ public:
 
 struct Metrics {
     double cpu = 0, gpu = -1, cpuTemp = -1, gpuTemp = -1, ramTemp = -1, ram = 0, ramUsedGiB = 0, ramTotalGiB = 0;
+    // Watts; -1 = no sensor. powerSource: "psu", "battery", "components" or "".
+    double cpuPower = -1, gpuPower = -1, power = -1;
+    QString powerSource; bool powerPartial = false;
+    QString sysRoot = "/sys", procRoot = "/proc";
     quint64 previousTotal = 0, previousIdle = 0;
-    void sample() {
-        auto fields = readText("/proc/stat").section('\n', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    qint64 previousEnergy = -1, previousEnergyAt = 0;
+    // hwmon powerN_* values are in microwatts; amdgpu exposes power1_average
+    // on older GPUs and power1_input on newer ones.
+    static double hwmonPower(const QString &path, int index = 1) {
+        for (const QString &kind : {"_average", "_input"}) {
+            QString value = readText(path + "/power" + QString::number(index) + kind);
+            if (!value.isEmpty()) return value.toDouble() / 1e6;
+        }
+        return -1;
+    }
+    // Package power from the RAPL energy counter. The kernel keeps energy_uj
+    // root-only by default, so this only works where it was made readable.
+    double raplPower(qint64 nowMs) {
+        QString base = sysRoot + "/class/powercap/intel-rapl:0";
+        QString value = readText(base + "/energy_uj");
+        if (value.isEmpty()) { previousEnergy = -1; return -1; }
+        qint64 energy = value.toLongLong(), range = readText(base + "/max_energy_range_uj").toLongLong();
+        double watts = -1;
+        if (previousEnergy >= 0 && nowMs > previousEnergyAt) {
+            qint64 delta = energy - previousEnergy;
+            if (delta < 0 && range > 0) delta += range;
+            if (delta >= 0) watts = delta / 1000.0 / double(nowMs - previousEnergyAt);
+        }
+        previousEnergy = energy; previousEnergyAt = nowMs;
+        return watts;
+    }
+    void sample(qint64 nowMs = QDateTime::currentMSecsSinceEpoch()) {
+        auto fields = readText(procRoot + "/stat").section('\n', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
         quint64 total = 0;
         for (int i = 1; i < std::min(9, int(fields.size())); ++i) total += fields[i].toULongLong();
         quint64 idle = fields.value(4).toULongLong() + fields.value(5).toULongLong();
         if (previousTotal && total > previousTotal) cpu = 100.0 * (1.0 - double(idle - previousIdle) / double(total - previousTotal));
         previousTotal = total; previousIdle = idle;
-        QString memory = readText("/proc/meminfo");
+        QString memory = readText(procRoot + "/meminfo");
         QRegularExpression available("MemAvailable:\\s+(\\d+)"), memTotal("MemTotal:\\s+(\\d+)");
         double t = memTotal.match(memory).captured(1).toDouble(), a = available.match(memory).captured(1).toDouble();
         ram = t > 0 ? (t-a)*100/t : 0;
         ramTotalGiB=t/1048576.0; ramUsedGiB=(t-a)/1048576.0;
-        cpuTemp = -1; gpuTemp = -1; ramTemp = -1; gpu = -1;
-        for (const QString &name : QDir("/sys/class/hwmon").entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            QString path = "/sys/class/hwmon/" + name;
+        cpuTemp = -1; gpuTemp = -1; ramTemp = -1; gpu = -1; gpuPower = -1; cpuPower = -1;
+        // -2 = no GPU seen yet, so a GPU without a power sensor still reports.
+        double psuPower = -1, busiestGpu = -2;
+        QString hwmonDir = sysRoot + "/class/hwmon";
+        for (const QString &name : QDir(hwmonDir).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QString path = hwmonDir + "/" + name;
             QString driver = readText(path + "/name");
             if (driver == "coretemp" || driver == "k10temp" || driver == "zenpower") {
                 double temp = readText(path + "/temp1_input").toDouble() / 1000;
                 if (temp > 0) cpuTemp = std::max(cpuTemp, temp);
+                // zenpower: power1 = cores, power2 = SoC.
+                if (driver == "zenpower" && cpuPower < 0)
+                    for (int i = 1; i <= 2; ++i) if (double w = hwmonPower(path, i); w >= 0) cpuPower = std::max(0.0, cpuPower) + w;
             }
             if (driver == "amdgpu" || driver == "nouveau") {
-                QString value = readText(path + "/temp1_input");
-                if (!value.isEmpty()) gpuTemp = value.toDouble() / 1000;
+                // Every GPU counts towards the total; temperature and load come
+                // from the one drawing the most, so they describe the same card.
+                double watts = hwmonPower(path);
+                if (watts >= 0) gpuPower = std::max(0.0, gpuPower) + watts;
+                if (busiestGpu == -2 || watts > busiestGpu) {
+                    busiestGpu = watts;
+                    QString temp = readText(path + "/temp1_input"), busy = readText(path + "/device/gpu_busy_percent");
+                    gpuTemp = temp.isEmpty() ? -1 : temp.toDouble() / 1000;
+                    gpu = busy.isEmpty() ? -1 : busy.toDouble();
+                }
             }
+            // Corsair HXi/RMi report the real delivered power over USB.
+            if (driver == "corsairpsu" && psuPower < 0) psuPower = hwmonPower(path);
             if(driver=="spd5118"||driver=="jc42") {
                 QString value=readText(path+"/temp1_input");
                 if(!value.isEmpty()) ramTemp=std::max(ramTemp,value.toDouble()/1000.0);
             }
         }
-        for (const QString &card : QDir("/sys/class/drm").entryList({"card*"}, QDir::Dirs)) {
-            QString value = readText("/sys/class/drm/" + card + "/device/gpu_busy_percent");
-            if (!value.isEmpty()) { gpu = value.toDouble(); break; }
+        if (gpu < 0)
+            for (const QString &card : QDir(sysRoot + "/class/drm").entryList({"card*"}, QDir::Dirs)) {
+                QString value = readText(sysRoot + "/class/drm/" + card + "/device/gpu_busy_percent");
+                if (!value.isEmpty()) { gpu = value.toDouble(); break; }
+            }
+        double rapl = raplPower(nowMs);
+        if (cpuPower < 0) cpuPower = rapl;
+        // A laptop battery only measures the whole system while discharging.
+        double batteryPower = -1;
+        QString supplyDir = sysRoot + "/class/power_supply";
+        for (const QString &name : QDir(supplyDir).entryList({"BAT*"}, QDir::Dirs)) {
+            QString path = supplyDir + "/" + name;
+            if (readText(path + "/status") != "Discharging") continue;
+            QString now = readText(path + "/power_now");
+            double watts = !now.isEmpty() ? now.toDouble() / 1e6
+                : readText(path + "/current_now").toDouble() * readText(path + "/voltage_now").toDouble() / 1e12;
+            if (watts > 0) batteryPower = std::max(0.0, batteryPower) + watts;
         }
+        powerPartial = false;
+        if (psuPower > 0) { power = psuPower; powerSource = "psu"; }
+        else if (batteryPower > 0) { power = batteryPower; powerSource = "battery"; }
+        else if (cpuPower >= 0 || gpuPower >= 0) {
+            power = std::max(0.0, cpuPower) + std::max(0.0, gpuPower);
+            powerSource = "components"; powerPartial = cpuPower < 0 || gpuPower < 0;
+        } else { power = -1; powerSource.clear(); }
+    }
+    // "45", "≥45" when a component is missing, "—" without sensors.
+    QString powerText() const {
+        if (power < 0) return QString::fromUtf8("—");
+        return (powerPartial ? QString::fromUtf8("≥") : QString()) + QString::number(qRound(power));
     }
 };
 
@@ -330,6 +403,9 @@ public:
                 {"gpu_load",metrics.gpu<0?"—":QString::number(qRound(metrics.gpu))},
                 {"ram",QString::number(qRound(metrics.ram))},
                 {"ram_temp",metrics.ramTemp<0?"—":QString::number(qRound(metrics.ramTemp))},
+                {"cpu_power",metrics.cpuPower<0?"—":QString::number(qRound(metrics.cpuPower))},
+                {"gpu_power",metrics.gpuPower<0?"—":QString::number(qRound(metrics.gpuPower))},
+                {"power",metrics.powerText()},
                 {"time",QTime::currentTime().toString("HH:mm")},
                 {"date",QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy")},{"theme",palette.name}};
             for(auto item:theme.spec["elements"].toArray()) {
@@ -385,7 +461,7 @@ public:
                 }
             }
             if (settings["overlay"].toBool()) {
-                text(painter,{40,15,850,50},"CPU "+temperature(metrics.cpuTemp)+"   GPU "+temperature(metrics.gpuTemp)+"   RAM "+QString::number(qRound(metrics.ram))+"%",25,palette.foreground);
+                text(painter,{40,15,850,50},"CPU "+temperature(metrics.cpuTemp)+"   GPU "+temperature(metrics.gpuTemp)+"   RAM "+QString::number(qRound(metrics.ram))+"%"+(metrics.power<0?QString():"   "+metrics.powerText()+" W"),25,palette.foreground);
                 text(painter,{930,15,310,50},QTime::currentTime().toString("HH:mm"),30,palette.foreground,true,Qt::AlignRight|Qt::AlignVCenter);
                 text(painter,{40,410,1200,45},audioVisual.toUpper()+" / "+palette.name,20,palette.muted);
             }
@@ -449,7 +525,7 @@ public:
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
-            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB}}}};
+            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial}}}};
     }
     QJsonObject command(const QJsonObject &request) {
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
@@ -587,8 +663,47 @@ int main(int argc,char **argv) {
         ok=ok&&uiText("HORA")=="TIME";
         qputenv("LC_ALL","es_MX.UTF-8");
         ok=ok&&uiText("HORA")==QString::fromUtf8("HORA");
-        QTextStream(stdout)<<(ok?"PASS: packet alignment, geometry, native layouts, audio renderers and input validation\n":"FAIL\n");
+        // Power sources against a fake sysfs tree.
+        QTemporaryDir fakeSys;
+        auto put=[&](const QString &file,const QByteArray &value) {
+            QString path=fakeSys.path()+"/"+file; QDir().mkpath(QFileInfo(path).path());
+            QFile out(path); if(!out.open(QIODevice::WriteOnly|QIODevice::Truncate)) ok=false; out.write(value);
+        };
+        auto drop=[&](const QString &file) { QFile::remove(fakeSys.path()+"/"+file); };
+        Metrics m; m.sysRoot=fakeSys.path(); m.procRoot=fakeSys.path();
+        m.sample(); ok=ok&&m.power<0&&m.powerText()==QString::fromUtf8("—");
+        put("class/hwmon/hwmon0/name","coretemp"); put("class/hwmon/hwmon0/temp1_input","50000");
+        put("class/hwmon/hwmon1/name","amdgpu"); put("class/hwmon/hwmon1/power1_average","45000000");
+        put("class/hwmon/hwmon1/temp1_input","60000"); put("class/hwmon/hwmon1/device/gpu_busy_percent","80");
+        put("class/hwmon/hwmon2/name","amdgpu"); put("class/hwmon/hwmon2/power1_input","5000000");
+        put("class/hwmon/hwmon2/temp1_input","40000"); put("class/hwmon/hwmon2/device/gpu_busy_percent","3");
+        m.sample(1000);
+        // Coretemp has no power: GPU-only total is a lower bound. Both GPUs add up;
+        // temperature and load follow the busiest one.
+        ok=ok&&m.cpuPower<0&&qFuzzyCompare(m.gpuPower,50.0)&&m.gpuTemp==60&&m.gpu==80&&m.powerPartial&&m.powerText()==QString::fromUtf8("≥50");
+        put("class/powercap/intel-rapl:0/max_energy_range_uj","1000000000");
+        put("class/powercap/intel-rapl:0/energy_uj","999000000"); m.sample(2000); ok=ok&&m.cpuPower<0;
+        // The counter wraps at max_energy_range_uj: 999 J -> 1 J is 2 J in 1 s.
+        put("class/powercap/intel-rapl:0/energy_uj","1000000"); m.sample(3000);
+        ok=ok&&qFuzzyCompare(m.cpuPower,2.0)&&!m.powerPartial&&m.powerSource=="components"&&m.powerText()=="52";
+        drop("class/powercap/intel-rapl:0/energy_uj");
+        put("class/hwmon/hwmon3/name","zenpower"); put("class/hwmon/hwmon3/power1_input","30000000"); put("class/hwmon/hwmon3/power2_input","10000000");
+        m.sample(4000); ok=ok&&qFuzzyCompare(m.cpuPower,40.0)&&m.powerText()=="90";
+        put("class/power_supply/BAT0/status","Charging"); put("class/power_supply/BAT0/power_now","20000000");
+        m.sample(5000); ok=ok&&m.powerSource=="components";
+        put("class/power_supply/BAT0/status","Discharging"); m.sample(6000); ok=ok&&m.powerSource=="battery"&&m.powerText()=="20";
+        drop("class/power_supply/BAT0/power_now"); put("class/power_supply/BAT0/current_now","2000000"); put("class/power_supply/BAT0/voltage_now","12000000");
+        m.sample(7000); ok=ok&&qFuzzyCompare(m.power,24.0);
+        put("class/hwmon/hwmon4/name","corsairpsu"); put("class/hwmon/hwmon4/power1_input","180000000");
+        m.sample(8000); ok=ok&&m.powerSource=="psu"&&m.powerText()=="180"&&!m.powerPartial;
+        QTextStream(stdout)<<(ok?"PASS: packet alignment, geometry, native layouts, audio renderers, power sources and input validation\n":"FAIL\n");
         return ok?0:1;
+    }
+    if(args.contains("--metrics")) {
+        // Two samples one second apart, so load and RAPL have a delta.
+        Metrics m; m.sample(); QThread::sleep(1); m.sample();
+        QTextStream(stdout)<<QJsonDocument(QJsonObject{{"cpu",m.cpu},{"gpu",m.gpu},{"cpuTemp",m.cpuTemp},{"gpuTemp",m.gpuTemp},{"cpuPower",m.cpuPower},{"gpuPower",m.gpuPower},{"power",m.power},{"powerText",m.powerText()},{"powerSource",m.powerSource},{"powerPartial",m.powerPartial}}).toJson(QJsonDocument::Compact)<<'\n';
+        return 0;
     }
     if(args.contains("--probe")) {
         Usb usb; bool ok=usb.open();

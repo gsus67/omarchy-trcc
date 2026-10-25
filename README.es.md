@@ -24,7 +24,7 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 v0.0.6 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
-Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
+Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. El consumo en vatios se lee sin root. Para el total de la PC se usa, por orden: una fuente Corsair HXi/RMi con USB (hwmon `corsairpsu`), la batería de un portátil mientras se descarga, o la suma CPU + GPU. La GPU sale de `amdgpu`/`nouveau` (se suman todas). La CPU sale de `zenpower` (núcleos + SoC) o del contador RAPL si el sistema lo deja leer; por defecto el kernel lo reserva a root, y entonces la CPU muestra `—` y el total aparece como `≥ X W`. La suma CPU + GPU no incluye placa, discos ni pérdidas de la fuente. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 
 ## Instalación
 
@@ -79,7 +79,7 @@ python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo import
 
 El formato usa `schema: 1`, `width: 1280`, `height: 480`, un `name` y una lista `elements`. Cada elemento `type: "text"` define `text`, `x`, `y`, `width`, `height` y `fontSize`; admite `bold`, `align` (`left`, `center`, `right`) y `color`. Los colores pueden ser `background`, `foreground`, `accent`, `muted`, `green` (siguen Omarchy) o `#RRGGBB`.
 
-Los textos pueden incluir `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`, `{gpu_load}`, `{ram}`, `{time}`, `{date}` y `{theme}`. Las temperaturas son números en °C; `{ram}` es el porcentaje de memoria usada. Los sensores ausentes se muestran como `—`.
+Los textos pueden incluir `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`, `{gpu_load}`, `{ram}`, `{cpu_power}`, `{gpu_power}`, `{power}`, `{time}`, `{date}` y `{theme}`. Las temperaturas son números en °C; `{ram}` es el porcentaje de memoria usada; los consumos están en vatios; `{power}` es el total de la PC (lleva `≥` delante si falta un componente). Los sensores ausentes se muestran como `—`.
 
 Opcionalmente, `background` indica una imagen de 1280×480 dentro de la misma carpeta del JSON, por ejemplo `"background": "fondo.png"`. Se guarda una copia normalizada; el tema importado no depende del archivo original. `backgroundColor` acepta los mismos colores que los textos. Los temas solo contienen datos, sin scripts ni código ejecutable. No son temas `.dc` de TRCC.
 

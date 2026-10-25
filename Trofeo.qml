@@ -297,6 +297,20 @@ Panel {
                 + Number(root.deviceData.metrics.ramTotalGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " GiB" : ""
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
+            Text {
+              readonly property var readings: root.deviceData.metrics || ({})
+              function watts(value) { return value === undefined || value < 0 ? "—" : Math.round(value) + " W" }
+              width: parent.width
+              // A PSU or battery measures the whole PC; otherwise it is CPU + GPU,
+              // a lower bound ("≥") when one of them has no sensor.
+              readonly property string detail: readings.powerSource === "psu" ? root.t("fuente")
+                : readings.powerSource === "battery" ? root.t("batería")
+                : "CPU " + watts(readings.cpuPower) + " · GPU " + watts(readings.gpuPower)
+              text: readings.power === undefined ? "" : root.t("Consumo") + " · "
+                + (readings.powerPartial ? "≥ " : "") + watts(readings.power)
+                + (readings.power >= 0 ? "  (" + detail + ")" : "")
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
             PanelSectionHeader { text: root.t("EN TU TROFEO"); foreground: root.barForeground }
             Image {
               width: parent.width

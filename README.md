@@ -44,9 +44,16 @@ shares the USB ID.
 Temperatures come from hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`,
 `nouveau`), CPU/RAM load from `/proc` and GPU load from the DRM
 `gpu_busy_percent` node. RAM temperature comes from `spd5118`/`jc42` sensors and
-shows the highest available value. Proprietary NVIDIA telemetry is not included
-yet. This version draws its own layouts and visuals; it does not import TRCC
-`.dc` themes, KarmaViz shaders or presets.
+shows the highest available value. Power draw in watts is read without root.
+The PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon
+`corsairpsu`), a laptop battery while discharging, or CPU + GPU. GPU power
+comes from `amdgpu`/`nouveau` (all GPUs are added). CPU power comes from
+`zenpower` (cores + SoC) or the RAPL counter when the system lets users read
+it; the kernel keeps it root-only by default, in which case the CPU shows `—`
+and the total shows as `≥ X W`. CPU + GPU leaves out the board, drives and PSU
+losses. Proprietary NVIDIA telemetry is not included yet. This version draws
+its own layouts and visuals; it does not import TRCC `.dc` themes, KarmaViz
+shaders or presets.
 
 ## Requirements
 
@@ -129,8 +136,10 @@ and `color`. Colors can be `background`, `foreground`, `accent`, `muted`,
 `green` (they follow Omarchy) or `#RRGGBB`.
 
 Text can include `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`,
-`{gpu_load}`, `{ram}`, `{time}`, `{date}` and `{theme}`. Temperatures are
-numbers in °C; `{ram}` is the used memory percentage. Missing sensors show as
+`{gpu_load}`, `{ram}`, `{cpu_power}`, `{gpu_power}`, `{power}`, `{time}`, `{date}`
+and `{theme}`. Temperatures are numbers in °C; `{ram}` is the used memory
+percentage; power values are watts and `{power}` is the PC total (prefixed with
+`≥` when a component is missing). Missing sensors show as
 `—`.
 
 Optionally, `background` names a 1280×480 image in the same folder as the JSON,

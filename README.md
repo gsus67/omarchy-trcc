@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.3
+# omarchy-trcc · v0.0.4
 
 Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB propio en C++/Qt: **no requiere instalar ni ejecutar TRCC**.
 
@@ -20,18 +20,17 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ## Compatibilidad
 
-v0.0.3 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+v0.0.4 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
 Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 
 ## Instalación
 
-En Omarchy/Arch se necesitan `cmake`, `gcc`, `pkgconf`, `qt6-base` (Qt 6.7+), `libusb`, `python` y `libpulse` (para `pactl` y `parec`). Omarchy Shell debe ofrecer el sistema de plugins y los componentes `qs.Ui`.
+La instalación utiliza las herramientas de Omarchy: un compilador C++ (`g++` o `clang++`), `pkg-config`, Qt 6.7+ con `rcc`, libusb, Python estándar y PipeWire/libpulse. **No requiere CMake, paquetes de pip ni entornos virtuales.** Omarchy Shell debe ofrecer el sistema de plugins y los componentes `qs.Ui`.
+
+En la lista de paquetes de Omarchy, `clang` y `quickshell` aportan el compilador y Qt; `python-gobject` aporta Python; `ddcutil` aporta libusb. La imagen de instalación incluye `base-devel` (GCC y pkgconf) y libpulse. No se instalan paquetes automáticamente ni se modifica la instalación de Omarchy.
 
 ```sh
-# Solo si faltan estas dependencias:
-omarchy pkg add cmake gcc pkgconf qt6-base libusb python libpulse
-
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
 
@@ -106,12 +105,18 @@ No elimina dependencias compartidas, configuraciones de TRCC ni otros plugins. A
 ## Desarrollo
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
-python -m unittest discover -s tests -v
+# Compila, ejecuta las pruebas nativas y elimina la compilación temporal:
+python native_build.py --test
+PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
 omarchy plugin validate .
+
+# Opcional, para conservar un binario de desarrollo:
+python native_build.py --output build
 ```
+
+`CMakeLists.txt` se conserva como alternativa de desarrollo; la instalación y actualización del plugin no lo utilizan. La compilación se realiza con argumentos separados, sin ejecutar un shell, y funciona con rutas que contienen espacios.
+
+La validación de esta versión incluye compilar y ejecutar las pruebas con un `PATH` limitado sin CMake, además de la actualización del plugin en el equipo real. No se ha ejecutado una instalación completa de Omarchy desde ISO para esta comprobación.
 
 La prueba nativa verifica estructura/alineación de paquetes, geometría, renderizadores y validación de entradas sin acceder al USB. Las pruebas del cliente verifican respuestas fragmentadas, límites y errores de conexión. La conexión real está comprobada mediante handshake y envío completo de frames.
 

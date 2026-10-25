@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omarchy-trcc",
   "name": "Omarchy TRCC",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "author": "gsus",
   "license": "GPL-3.0-or-later",
   "description": "Control nativo de la Trofeo Vision sin TRCC: temas, métricas y visuales sincronizados con Omarchy.",

@@ -13,6 +13,7 @@ import tempfile
 import time
 sys.dont_write_bytecode = True
 from i18n import translate as tr
+import native_build
 
 
 def run(*command):
@@ -33,17 +34,18 @@ def ensure(source):
     source = Path(source).resolve()
     if not (source / "manifest.json").is_file():
         raise ValueError(tr("No se encontró el plugin."))
-    for executable in ("cmake", "g++", "pkg-config", "systemctl"):
+    for executable in ("systemctl",):
         if not shutil.which(executable):
-            raise RuntimeError(tr("Falta %1. Dependencias: %2", executable, "omarchy pkg add cmake gcc pkgconf qt6-base libusb python libpulse"))
-    versions = run("pkg-config", "--modversion", "Qt6Core", "libusb-1.0")
+            raise RuntimeError(tr("Falta %1. Dependencias: %2", executable, "systemd"))
+    tools = native_build.discover()
+    versions = native_build.versions(tools)
     state = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "omarchy-trcc"
     config = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     state.mkdir(parents=True, exist_ok=True)
     with (state / ".bootstrap.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        digest = hashlib.sha256(versions.encode())
-        for path in [source / "CMakeLists.txt", source / "i18n/messages.json", *sorted((source / "src").glob("*"))]:
+        digest = hashlib.sha256(b"direct-cxx-v1\n" + versions.encode())
+        for path in [source / "native_build.py", source / "i18n/messages.json", *sorted((source / "src").glob("*"))]:
             if path.is_file():
                 digest.update(path.name.encode())
                 digest.update(path.read_bytes())
@@ -53,11 +55,10 @@ def ensure(source):
         changed = not binary.is_file() or not marker.is_file() or marker.read_text() != fingerprint
         if changed:
             with tempfile.TemporaryDirectory(prefix="build-", dir=state) as temporary:
-                run("cmake", "-S", str(source), "-B", temporary, "-DCMAKE_BUILD_TYPE=Release")
-                run("cmake", "--build", temporary, "--target", "trofeo-engine", "-j2")
+                compiled = native_build.build(source, temporary, tools=tools)
                 binary.parent.mkdir(exist_ok=True)
                 replacement = binary.with_suffix(".new")
-                shutil.copy2(Path(temporary) / "trofeo-engine", replacement)
+                shutil.copy2(compiled, replacement)
                 replacement.replace(binary)
                 marker.write_text(fingerprint)
         unit = config / "systemd/user/omarchy-trcc.service"

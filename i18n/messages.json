@@ -90,6 +90,11 @@
     "Barras": "Bars",
     "Onda": "Wave",
     "Anillos": "Rings",
-    "Partículas": "Particles"
+    "Partículas": "Particles",
+    "Falló la orden: %1": "Command failed: %1",
+    "No se encontró un compilador C++ (g++ o clang++).": "No C++ compiler was found (g++ or clang++).",
+    "No se encontró pkg-config.": "pkg-config was not found.",
+    "No se encontró el generador de recursos rcc de Qt 6.": "The Qt 6 rcc resource compiler was not found.",
+    "Compilación terminada; archivos temporales eliminados.": "Build completed; temporary files removed."
   }
 }

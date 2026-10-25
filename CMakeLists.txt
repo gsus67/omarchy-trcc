@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(omarchy_trofeo VERSION 0.0.3 LANGUAGES CXX)
+project(omarchy_trofeo VERSION 0.0.4 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Network)
 find_package(PkgConfig REQUIRED)

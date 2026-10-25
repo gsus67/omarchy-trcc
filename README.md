@@ -114,7 +114,7 @@ omarchy plugin validate .
 python native_build.py --output build
 ```
 
-`CMakeLists.txt` se conserva como alternativa de desarrollo; la instalación y actualización del plugin no lo utilizan. La compilación se realiza con argumentos separados, sin ejecutar un shell, y funciona con rutas que contienen espacios.
+La compilación se realiza únicamente con `native_build.py`, con argumentos separados, sin ejecutar un shell, y funciona con rutas que contienen espacios.
 
 La validación de esta versión incluye compilar y ejecutar las pruebas con un `PATH` limitado sin CMake, además de la actualización del plugin en el equipo real. No se ha ejecutado una instalación completa de Omarchy desde ISO para esta comprobación.
 

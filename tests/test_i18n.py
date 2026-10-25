@@ -24,7 +24,7 @@ class SystemLanguageTests(unittest.TestCase):
     def test_unknown_authored_text_is_preserved(self):
         with patch.dict("os.environ", {"LC_ALL": "en_US.UTF-8"}):
             self.assertEqual(translate("Mi tema personal"), "Mi tema personal")
-            self.assertEqual(translate("Falta %1. Dependencias: %2", "cmake", "packages"), "Missing cmake. Dependencies: packages")
+            self.assertEqual(translate("Falta %1. Dependencias: %2", "compiler", "packages"), "Missing compiler. Dependencies: packages")
 
 
 if __name__ == "__main__":

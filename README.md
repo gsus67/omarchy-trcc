@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.8
+# omarchy-trcc · v0.0.9
 
 **English** · [Español](README.es.md)
 
@@ -24,7 +24,7 @@ The panel tabs (Home is shown above; Power is under [Compatibility](#compatibili
   </tr>
 </table>
 
-The four built-in layouts as the Trofeo shows them (1280×480, here at half size):
+Built-in layouts as the Trofeo shows them (the animated ones are recordings of the real screen) (1280×480, here at half size):
 
 <table>
   <tr>
@@ -37,6 +37,21 @@ The four built-in layouts as the Trofeo shows them (1280×480, here at half size
     <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
   </tr>
   <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-gauges.png" alt="Gauges" width="400"></td>
+    <td><img src="assets/gallery/lcd-clock.png" alt="Clock" width="400"></td>
+  </tr>
+  <tr><td align="center">Gauges</td><td align="center">Clock</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-matrix.gif" alt="Matrix" width="400"></td>
+    <td><img src="assets/gallery/lcd-omarchy.gif" alt="Omarchy" width="400"></td>
+  </tr>
+  <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-fx.gif" alt="Metrics FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-picture.gif" alt="Picture FX" width="400"></td>
+  </tr>
+  <tr><td align="center">Metrics FX</td><td align="center">Picture FX</td></tr>
 </table>
 
 ## Features
@@ -55,8 +70,28 @@ The four built-in layouts as the Trofeo shows them (1280×480, here at half size
   (board, RAM, drives, fans, cooling, RGB) and the PSU loss.
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
-- Four native layouts: **Focus, Terminal, Rings and Dots**. The screen also
-  follows the system palette automatically.
+- Ten native layouts: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix,
+  Omarchy, Metrics FX and Picture FX**. The last four are animated, with the
+  data on top: Matrix (falling glyphs); Omarchy (your
+  `~/.config/omarchy/branding/screensaver.txt` art assembling with a different
+  effect each cycle, like the Omarchy screensaver); Metrics FX (the CPU/GPU/RAM
+  rows assembling with those effects); and Picture FX (a picture you choose in
+  Themes → Picture FX → **Choose picture…**, turned into text art with Omarchy's
+  own `omarchy-transcode-ascii`, exactly like `omarchy branding screensaver
+  image`; logos with a transparent background work best. Only the text art is
+  kept, not a copy of the picture; up to 20 MB).
+- These three use the system's **ttfx**, the engine of the Omarchy
+  screensaver, so they get all of its colored effects (fireworks, blackhole,
+  matrix, rings…); each effect is followed by a few seconds with live data in
+  its final colors. Nothing extra is installed: without ttfx they fall back to
+  built-in effects. The screen also follows the system palette automatically.
+- Clock in Display: 24 h (13:05) or 12 h (1:05 PM), for every layout.
+- Animation FPS in Display: Auto (recommended), 4, 8, 15 or 30, for the visuals
+  and the animated layouts only; static layouts send one frame a second. Auto
+  measures how much the image changes between frames and runs from 2 to 30 FPS
+  (30 with high motion, 2 on a still image), rising at once and falling one
+  step a second; a busy CPU caps it at 12 or 4. The panel shows the current
+  FPS and why.
 - CPU, GPU and RAM temperature with load and watts, CPU clock, VRAM and RAM in
   use, total power, date and clock. A missing sensor is shown as `—`.
 - Software brightness, 0/90/180/270° rotation, metrics over the visuals and
@@ -70,7 +105,7 @@ The four built-in layouts as the Trofeo shows them (1280×480, here at half size
 
 ## Compatibility
 
-v0.0.8 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
+v0.0.9 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
 checks the panel identity on connect and rejects other geometries. It is not
 compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
 shares the USB ID.
@@ -95,7 +130,7 @@ as `≥ X W`. The panel shows the total on Home and each component's watts in it
 card; the Trofeo shows the total in the layouts' header, next to the date. CPU +
 GPU leaves out the board, RAM, drives and PSU losses.
 
-The Focus, Terminal, Rings and Dots layouts share one design: the time on top
+All built-in layouts share one design: the time on top (large in Clock)
 with the PC total and the date, then CPU, GPU and RAM. Each row shows the
 temperature as its value and, beside it, load and watts (RAM: use). Without a
 RAM sensor, RAM shows its use instead. The bottom line shows the CPU clock

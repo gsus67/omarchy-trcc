@@ -179,6 +179,20 @@ Panel {
   }
 
   Dialogs.FileDialog {
+    id: pictureDialog
+    title: root.t("Imagen para Picture FX")
+    fileMode: Dialogs.FileDialog.OpenFile
+    nameFilters: [root.t("Imágenes (*.png *.svg *.jpg *.jpeg *.webp)")]
+    onAccepted: {
+      var filePath = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
+      root.run(["picture", filePath])
+      root.expandedTheme = "picture"
+      root.page = "themes"
+      root.open()
+    }
+    onRejected: { root.page = "themes"; root.open() }
+  }
+  Dialogs.FileDialog {
     id: importDialog
     title: root.t("Añadir tema a Omarchy TRCC")
     fileMode: Dialogs.FileDialog.OpenFile
@@ -397,6 +411,52 @@ Panel {
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
+            // Time format for every layout.
+            PanelSectionHeader { text: root.t("RELOJ"); foreground: root.barForeground }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: ["24h", "12h"]
+                Button {
+                  required property var modelData
+                  text: modelData === "24h" ? root.t("24 h (13:05)") : root.t("12 h (1:05 PM)")
+                  selected: (root.lcdState.clock || "24h") === modelData
+                  enabled: !root.busy
+                  onClicked: root.run(["clock", modelData])
+                }
+              }
+            }
+            // Frame rate for animations only; static layouts stay at one frame a second.
+            PanelSectionHeader { text: root.t("FPS DE ANIMACIÓN"); foreground: root.barForeground }
+            Text {
+              textFormat: Text.PlainText
+              text: root.t("Ahora en la Trofeo: ") + (root.deviceData.fpsNow || 0) + " FPS"
+                + (root.deviceData.autoReason ? " · " + root.t(root.deviceData.autoReason) : "")
+              color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                // 0 = Auto, the recommended choice.
+                model: [0, 4, 8, 15, 30]
+                Button {
+                  required property var modelData
+                  text: modelData === 0 ? root.t("Auto · recomendado") : String(modelData)
+                  selected: (root.lcdState.fps === undefined ? 0 : root.lcdState.fps) === modelData
+                  enabled: !root.busy
+                  onClicked: root.run(["fps", modelData === 0 ? "auto" : String(modelData)])
+                }
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: root.t("Solo para los visuales y los temas animados. Auto mide cuánto cambia la imagen y va de 2 a 30 FPS: sube al momento cuando hay movimiento y baja poco a poco; con la CPU ocupada pone un tope. Más FPS, más fluido y más CPU.")
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
           }
 
           // Estimate for what has no sensor: detected parts plus what the user marks.
@@ -586,10 +646,14 @@ Panel {
             ListView {
               id: themeList
               width: parent.width
-              height: Math.min(contentHeight, Style.space(190))
+              // Ten rows visible (the ten built-in themes); imported ones scroll,
+              // with the bar shown whenever the mouse is over the list.
+              readonly property real rowHeight: count > 0 ? (contentHeight + spacing) / count : 0
+              height: Math.min(contentHeight, rowHeight * 10 - spacing)
               clip: true
               spacing: Style.space(4)
               boundsBehavior: Flickable.StopAtBounds
+              HoverHandler { id: themeListHover }
               model: root.deviceData.themes || []
               delegate: Button {
                 required property var modelData
@@ -601,7 +665,9 @@ Panel {
                 selected: root.expandedTheme === modelData.path
                 onClicked: root.selectTheme(modelData.path)
               }
-              Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
+              Controls.ScrollBar.vertical: Controls.ScrollBar {
+                policy: themeList.contentHeight > themeList.height && themeListHover.hovered ? Controls.ScrollBar.AlwaysOn : Controls.ScrollBar.AsNeeded
+              }
             }
             Column {
               width: parent.width
@@ -630,6 +696,13 @@ Panel {
                   text: root.t("Aplicar en la Trofeo")
                   enabled: !root.busy
                   onClicked: root.run(["theme", root.expandedTheme])
+                }
+                // Picture FX: the picture becomes block art; the original is not copied.
+                Button {
+                  text: root.t("Elegir imagen…")
+                  visible: root.expandedTheme === "picture"
+                  enabled: !root.busy
+                  onClicked: { root.close(); pictureDialog.open() }
                 }
                 Button {
                   text: root.t("Quitar copia")

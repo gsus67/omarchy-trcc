@@ -118,6 +118,27 @@
     "Placa base": "Motherboard",
     "Discos": "Drives",
     "Refrigeración": "Cooling",
-    "Ventiladores": "Fans"
+    "Ventiladores": "Fans",
+    "FPS DE ANIMACIÓN": "ANIMATION FPS",
+    "Auto · recomendado": "Auto · recommended",
+    "Elegir imagen…": "Choose picture…",
+    "Imagen para Picture FX": "Picture for Picture FX",
+    "Selecciona una imagen PNG/JPG/WebP.": "Select a PNG/JPG/WebP image.",
+    "No se pudo leer la imagen.": "Could not read the image.",
+    "No se pudo guardar la imagen.": "Could not save the image.",
+    "Imágenes (*.png *.svg *.jpg *.jpeg *.webp)": "Images (*.png *.svg *.jpg *.jpeg *.webp)",
+    "Selecciona una imagen PNG/JPG/WebP/SVG.": "Select a PNG/JPG/WebP/SVG image.",
+    "No se pudo convertir la imagen (prueba un PNG o SVG con fondo transparente).": "Could not convert the image (try a PNG or SVG with a transparent background).",
+    "Ahora en la Trofeo: ": "Now on the Trofeo: ",
+    "Solo para los visuales y los temas animados. Auto mide cuánto cambia la imagen y va de 2 a 30 FPS: sube al momento cuando hay movimiento y baja poco a poco; con la CPU ocupada pone un tope. Más FPS, más fluido y más CPU.": "Only for the visuals and the animated themes. Auto measures how much the image changes and runs from 2 to 30 FPS: it rises at once with motion and falls gradually; a busy CPU caps it. More FPS is smoother and uses more CPU.",
+    "movimiento alto": "high motion",
+    "movimiento medio": "medium motion",
+    "movimiento bajo": "low motion",
+    "imagen quieta": "still image",
+    "CPU ocupada": "busy CPU",
+    "Métricas FX": "Metrics FX",
+    "RELOJ": "CLOCK",
+    "24 h (13:05)": "24 h (13:05)",
+    "12 h (1:05 PM)": "12 h (1:05 PM)"
   }
 }

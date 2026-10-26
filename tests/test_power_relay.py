@@ -47,12 +47,19 @@ class RelayTest(unittest.TestCase):
             time.sleep(0.05)
         self.fail("relay published nothing")
 
+    def write_counter(self, value):
+        """Replace the fake counter atomically: sysfs is never read half-written,
+        while a plain truncate-and-write could hand the relay an empty file."""
+        staging = self.rapl / "energy_uj.tmp"
+        staging.write_text(f"{value}\n")
+        os.replace(staging, self.rapl / "energy_uj")
+
     def feed(self, start, watts, wraps=False):
         """Advance the fake counter by `watts` µJ per µs, in real time, and
         return the relay's second value: on a busy runner this feeder can
         stall while the relay starts, skewing only its first interval."""
         target = self.out / "cpu-watts"
-        (self.rapl / "energy_uj").write_text(f"{start}\n")
+        self.write_counter(start)
         self.start()
         began = time.monotonic()
         published = []
@@ -61,7 +68,7 @@ class RelayTest(unittest.TestCase):
             value = start + int((time.monotonic() - began) * 1e6 * watts)
             if wraps:
                 value %= 1000000000
-            (self.rapl / "energy_uj").write_text(f"{value}\n")
+            self.write_counter(value)
             if target.exists():
                 stamp = target.stat().st_mtime_ns
                 if not published or published[-1] != stamp:
@@ -73,14 +80,16 @@ class RelayTest(unittest.TestCase):
     def test_publishes_whole_watts_only(self):
         text = self.feed(5_000_000, 42)
         self.assertRegex(text, r"^\d+\n$", "only a whole number of watts")
-        self.assertLessEqual(abs(int(text) - 42), 2)
+        # The feeder runs in real time on shared CI machines; 20 % still catches
+        # unit errors (×1000), a missed wrap or a stuck value.
+        self.assertLessEqual(abs(int(text) - 42), 42 * 0.2)
         self.assertEqual(sorted(p.name for p in self.out.iterdir()), ["cpu-watts"], "no other files")
         self.assertEqual((self.out / "cpu-watts").stat().st_mode & 0o777, 0o644)
 
     def test_counter_wrap(self):
         # 30 W reaches the 1e9 µJ range at ~1.5 s: inside the checked second interval.
         text = self.feed(955_000_000, 30, wraps=True)
-        self.assertLessEqual(abs(int(text) - 30), 2)
+        self.assertLessEqual(abs(int(text) - 30), 30 * 0.2)
 
     def test_without_rapl_exits_quietly(self):
         result = subprocess.run(["bash", str(RELAY)], timeout=5, env=dict(

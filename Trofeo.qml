@@ -217,6 +217,7 @@ Panel {
           spacing: Style.space(12)
 
           Text {
+            textFormat: Text.PlainText
             text: "Omarchy TRCC"
             color: root.barForeground
             font.family: Style.font.family
@@ -224,6 +225,7 @@ Panel {
             font.bold: true
           }
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: (root.ready ? root.deviceData.resolution + " · " + (root.deviceData.usbPresent ? root.t("USB conectado") : root.t("USB no detectado")) : (bootstrapProc.running ? root.t("Preparando el motor…") : root.t("Conectando con el motor…"))) + (root.busy ? root.t(" · Aplicando…") : "")
             color: Commons.Color.muted
@@ -270,14 +272,17 @@ Panel {
                     anchors.margins: Style.space(10)
                     spacing: Style.space(5)
                     Text {
+                      textFormat: Text.PlainText
                       text: metricCard.modelData.name
                       color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
                     }
                     Text {
+                      textFormat: Text.PlainText
                       text: metricCard.temperature < 0 ? "—" : Math.round(metricCard.temperature) + "°C"
                       color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.title; font.bold: true
                     }
                     Text {
+                      textFormat: Text.PlainText
                       text: metricCard.load < 0 ? root.t("Sin sensor") : Math.round(metricCard.load) + "% " + (metricCard.modelData.name === "RAM" ? root.t("en uso") : root.t("carga"))
                       color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
                     }
@@ -286,6 +291,7 @@ Panel {
               }
             }
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.deviceData.metrics ? "RAM · " + Number(root.deviceData.metrics.ramUsedGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " / "
                 + Number(root.deviceData.metrics.ramTotalGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " GiB" : ""
@@ -312,6 +318,7 @@ Panel {
             visible: root.page === "screen" && root.ready
             Button { text: root.t("Reconectar USB"); enabled: !root.busy; onClicked: root.run(["reconnect"]) }
             Text {
+              textFormat: Text.PlainText
               text: root.t("Brillo · ") + Math.round(brightness.value) + "%"
               color: root.barForeground
               font.family: Style.font.family
@@ -369,12 +376,14 @@ Panel {
                 onClicked: { root.close(); importDialog.open() }
               }
               Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: (root.deviceData.themes || []).length + root.t(" temas")
                 color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
               }
             }
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.t("Selecciona un tema para desplegar su vista previa.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
@@ -406,6 +415,7 @@ Panel {
               visible: !!root.themeInfo().path
               PanelSeparator { foreground: root.barForeground }
               Text {
+                textFormat: Text.PlainText
                 text: root.themeInfo().name || ""
                 color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
               }
@@ -435,6 +445,7 @@ Panel {
               }
             }
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.t("Añade imágenes de 1280×480 o temas JSON con métricas. Se guarda una copia; tu archivo original se conserva.")
               wrapMode: Text.Wrap; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
@@ -446,6 +457,7 @@ Panel {
             spacing: Style.space(10)
             visible: root.page === "visuals" && root.ready
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.deviceData.playing ? root.t("En pantalla: ") + root.deviceData.playing : root.t("Ningún visual de audio activo")
               color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; wrapMode: Text.Wrap
@@ -458,6 +470,7 @@ Panel {
               Button { text: root.t("Seguir acento"); selected: root.deviceData.followAccent === true; enabled: !root.busy; onClicked: root.run(["follow-accent", root.deviceData.followAccent ? "off" : "on"]) }
             }
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: root.t("Los visuales reaccionan a la salida de audio, sin usar el micrófono. Seguir acento adapta el color al tema de Omarchy.")
               wrapMode: Text.Wrap; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Arch, like Omarchy)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed gcc pkgconf qt6-base libusb python ttf-dejavu
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Python tests and QML security checks
+        run: python -m unittest discover -s tests -v
+      - name: Native build and self-tests
+        run: python native_build.py --test
+      - name: Plugin manifest
+        run: python -c "import json; json.load(open('manifest.json'))"
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: c-cpp
+            build-mode: manual
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed gcc pkgconf qt6-base libusb python git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      - if: matrix.build-mode == 'manual'
+        name: Build engine
+        run: python native_build.py --output build
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}

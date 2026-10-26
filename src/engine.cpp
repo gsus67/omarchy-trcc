@@ -46,6 +46,12 @@ static QString readText(const QString &path) {
     if (!file.open(QIODevice::ReadOnly)) return {};
     return QString::fromUtf8(file.readAll()).trimmed();
 }
+// The plugin version from its manifest, so the LCD never shows a stale one.
+static QString pluginVersion() {
+    QString dir = qEnvironmentVariable("OMARCHY_TRCC_PLUGIN_DIR");
+    if (dir.isEmpty()) return {};
+    return QJsonDocument::fromJson(readText(dir + "/manifest.json").toUtf8()).object()["version"].toString();
+}
 static QByteArray framePacket(const QByteArray &jpeg) {
     QByteArray out(20, '\0');
     out.replace(0, 4, QByteArray::fromHex("dadbdcdd"));
@@ -543,7 +549,8 @@ public:
             }
         } else {
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
-            text(painter, {920,20,320,50}, QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy"), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            QString date = QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy");
+            text(painter, {760,20,480,50}, metrics.power < 0 ? date : metrics.powerText() + " W  ·  " + date, 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
             const QStringList labels = {"CPU", "GPU", "RAM", uiText("HORA")};
             const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
             const QStringList details = {uiText("%1% CARGA").arg(qRound(metrics.cpu)), metrics.gpu<0 ? uiText("SIN SENSOR DE CARGA") : uiText("%1% CARGA").arg(qRound(metrics.gpu)), uiText("MEMORIA EN USO"), uiText("HORA LOCAL")};
@@ -572,7 +579,8 @@ public:
                 text(painter,{x,350,290,50},details[i],18,palette.muted);
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
-            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB  ·  v0.0.6",16,palette.muted);
+            QString version = pluginVersion();
+            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB"+(version.isEmpty()?QString():"  ·  v"+version),16,palette.muted);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));

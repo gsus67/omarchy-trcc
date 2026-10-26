@@ -413,6 +413,11 @@ Panel {
             }
             // Frame rate for animations only; static layouts stay at one frame a second.
             PanelSectionHeader { text: root.t("FPS DE ANIMACIÓN"); foreground: root.barForeground }
+            Text {
+              textFormat: Text.PlainText
+              text: root.t("Ahora en la Trofeo: ") + (root.deviceData.fpsNow || 0) + " FPS"
+              color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
             Flow {
               width: parent.width
               spacing: Style.space(6)

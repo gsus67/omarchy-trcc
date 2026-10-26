@@ -586,6 +586,8 @@ public:
         if (file.open(QIODevice::WriteOnly)) { file.write(QJsonDocument(settings).toJson()); file.commit(); }
     }
     QString visual() const { return settings["visual"].toString(); }
+    // "30 FPS": frames the LCD really received in the last second.
+    QString fpsLabel() const { return QString::number(qRound(fpsNow)) + " FPS"; }
     bool usbConnected() { std::lock_guard<std::mutex> device(sender.lock); return usb.connected(); }
     QString usbError() { std::lock_guard<std::mutex> device(sender.lock); return usb.error; }
     void startAudio() {
@@ -758,6 +760,7 @@ public:
                 text(painter,{40,15,850,50},"CPU "+temperature(metrics.cpuTemp)+"   GPU "+temperature(metrics.gpuTemp)+"   RAM "+QString::number(qRound(metrics.ram))+"%"+(metrics.power<0?QString():"   "+metrics.powerText()+" W"),25,palette.foreground);
                 text(painter,{930,15,310,50},QTime::currentTime().toString("HH:mm"),30,palette.foreground,true,Qt::AlignRight|Qt::AlignVCenter);
                 text(painter,{40,410,1200,45},audioVisual.toUpper()+" / "+palette.name,20,palette.muted);
+                text(painter,{1000,410,240,45},fpsLabel(),16,palette.muted,false,Qt::AlignRight|Qt::AlignVCenter);
             }
         } else {
             const QList<Field> data = fieldData();
@@ -853,7 +856,8 @@ public:
             QString version = pluginVersion();
             // Footer: clocks and memory together, the plugin version on the right.
             text(painter,{40,415,1000,45},summary().join(QString::fromUtf8("   ·   ")),20,palette.foreground);
-            if(!version.isEmpty()) text(painter,{1040,415,200,45},"v"+version,16,palette.muted,false,Qt::AlignRight|Qt::AlignVCenter);
+            // Discreet corner: the real frame rate, then the plugin version.
+            text(painter,{1000,415,240,45},fpsLabel()+(version.isEmpty()?QString():"  ·  v"+version),16,palette.muted,false,Qt::AlignRight|Qt::AlignVCenter);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));

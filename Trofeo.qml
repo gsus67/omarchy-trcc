@@ -390,42 +390,6 @@ Panel {
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
-            // What the built-in layouts show: tap to add or remove; the engine keeps catalog order.
-            PanelSectionHeader { text: root.t("EN LOS DISEÑOS"); foreground: root.barForeground }
-            Flow {
-              id: fieldPicker
-              readonly property var chosen: root.lcdState.fields || ["cpu", "gpu", "ram", "time"]
-              width: parent.width
-              spacing: Style.space(6)
-              Repeater {
-                model: [
-                  {id: "cpu", name: "Temp. CPU"}, {id: "gpu", name: "Temp. GPU"},
-                  {id: "ram", name: "Uso RAM"}, {id: "ramTemp", name: "Temp. RAM"},
-                  {id: "time", name: "Hora"}, {id: "power", name: "Consumo total"},
-                  {id: "cpuPower", name: "Consumo CPU"}, {id: "gpuPower", name: "Consumo GPU"}
-                ]
-                Button {
-                  required property var modelData
-                  readonly property bool chosen: fieldPicker.chosen.indexOf(modelData.id) >= 0
-                  text: root.t(modelData.name)
-                  selected: chosen
-                  // At least one slot stays.
-                  enabled: !root.busy && (!chosen || fieldPicker.chosen.length > 1)
-                  onClicked: {
-                    var next = fieldPicker.chosen.filter(function (id) { return id !== modelData.id })
-                    if (!chosen) next.push(modelData.id)
-                    root.run(["fields"].concat(next))
-                  }
-                }
-              }
-            }
-            Text {
-              textFormat: Text.PlainText
-              width: parent.width
-              wrapMode: Text.WordWrap
-              text: root.t("Elige qué datos muestran los diseños Focus, Terminal, Rings y Dots; con más de 4 se dibujan más pequeños.")
-              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
-            }
           }
 
           Column {

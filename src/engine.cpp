@@ -36,10 +36,15 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include "scenes.hpp"
 #include "themes.hpp"
 
 static constexpr int W = 1280, H = 480;
-static const QStringList layouts = {"focus", "terminal", "rings", "dots"};
+static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy"};
+// Layouts with a moving background: drawn at the chosen frame rate, like the visuals.
+static const QStringList animatedLayouts = {"matrix", "omarchy"};
+// Frame rates offered for animations; 8 is the recommended balance of smoothness and CPU.
+static const QList<int> frameRates = {4, 8, 15, 30};
 static const QStringList visualIds = {"bars", "wave", "rings", "particles"};
 static QString readText(const QString &path) {
     QFile file(path);
@@ -477,6 +482,8 @@ public:
     QByteArray samples;
     std::array<double, 32> levels{};
     double phase = 0;
+    scenes::MatrixRain rain;
+    scenes::LogoScene logo;
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
@@ -487,7 +494,7 @@ public:
         customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
-                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}};
+                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}, {"fps", 8}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
@@ -496,6 +503,8 @@ public:
         settings["brightness"] = std::clamp(settings["brightness"].toInt(100), 0, 100);
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
         settings["estimate"] = cleanEstimate(settings["estimate"].toObject());
+        if (!frameRates.contains(settings["fps"].toInt())) settings["fps"] = 8;
+        logo.setSource(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omarchy/branding/screensaver.txt");
         metrics.estimate = settings["estimate"].toObject();
         palette.load(); metrics.sample();
         QObject::connect(&audio, &QProcess::readyReadStandardOutput, [&] {
@@ -549,7 +558,8 @@ public:
     }
     // The rows every built-in layout shows: temperature as the value, then
     // load and watts (RAM: use and estimated watts). ring = load for rings.
-    struct Field { QString label, value, detail; double ring; };
+    // gauge = temperature as a 0–1 fraction of 100 °C for the gauges layout.
+    struct Field { QString label, value, detail; double ring, gauge; };
     QList<Field> fieldData() const {
         auto percent = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + "%"; };
         auto watts = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + " W"; };
@@ -557,12 +567,12 @@ public:
         // Without a RAM sensor its use takes the value slot.
         bool ramSensor = metrics.ramTemp >= 0;
         return {
-            {"CPU", temperature(metrics.cpuTemp), join({percent(metrics.cpu), watts(metrics.cpuPower)}), metrics.cpu},
-            {"GPU", temperature(metrics.gpuTemp), join({percent(metrics.gpu), watts(metrics.gpuPower)}), std::max(0., metrics.gpu)},
+            {"CPU", temperature(metrics.cpuTemp), join({percent(metrics.cpu), watts(metrics.cpuPower)}), metrics.cpu, metrics.cpuTemp / 100},
+            {"GPU", temperature(metrics.gpuTemp), join({percent(metrics.gpu), watts(metrics.gpuPower)}), std::max(0., metrics.gpu), metrics.gpuTemp / 100},
             {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram),
                 // Estimated module watts; without them, GiB in use so the row is never empty.
                 join({ramSensor ? percent(metrics.ram) : QString(), metrics.ramPower >= 0 ? QString::fromUtf8("≈") + watts(metrics.ramPower)
-                      : QString("%1 GiB").arg(metrics.ramUsedGiB,0,'f',1)}), metrics.ram}};
+                      : QString("%1 GiB").arg(metrics.ramUsedGiB,0,'f',1)}), metrics.ram, (ramSensor ? metrics.ramTemp : metrics.ram) / 100}};
     }
     // Clock and memory in one line: "CPU 3.4 / 4.4 GHz", "GPU 1.0 / 16.0 GiB",
     // "RAM 4.1 / 31.2 GiB"; missing readings are left out.
@@ -675,12 +685,21 @@ public:
                 text(painter,{40,410,1200,45},audioVisual.toUpper()+" / "+palette.name,20,palette.muted);
             }
         } else {
-            text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
-            // The time leads the header, with the PC total and the date beside it.
-            text(painter, {560,20,520,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
-            text(painter, {1090,12,150,62}, QTime::currentTime().toString("HH:mm"), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
             const QList<Field> data = fieldData();
             int count = data.size();
+            // Animated backgrounds first; translucent bands keep the data readable.
+            QColor band = palette.background; band.setAlphaF(0.86);
+            if (layout == "matrix") {
+                image.fill(palette.background.darker(160));
+                rain.draw(painter, palette.font, palette.foreground, palette.green);
+                painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,405,W,75), band);
+            } else if (layout == "omarchy")
+                logo.draw(painter, {40,92,1200,240}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
+            // The time leads the header, with the PC total and the date beside it;
+            // Clock shows the time large instead.
+            text(painter, {560,20,520,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            if (layout != "clock") text(painter, {1090,12,150,62}, QTime::currentTime().toString("HH:mm"), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);
                 for (int i=0;i<count;++i) {
@@ -688,6 +707,46 @@ public:
                     text(painter,{55,y,200,60},data[i].label.toLower(),28,palette.accent);
                     text(painter,{300,y,350,60},data[i].value,40,palette.foreground,true);
                     text(painter,{690,y,530,60},data[i].detail,24,palette.muted);
+                }
+            } else if (layout == "matrix") {
+                // A card over the rain with the same rows as Terminal.
+                QPainterPath card; card.addRoundedRect(QRectF(290,112,700,262),14,14);
+                painter.fillPath(card, band); painter.setPen(QPen(palette.green,2)); painter.drawPath(card);
+                for (int i=0;i<count;++i) {
+                    double y = 132.+i*76;
+                    text(painter,{330,y,150,60},data[i].label,28,palette.green,true);
+                    text(painter,{480,y,200,60},data[i].value,40,palette.foreground,true);
+                    text(painter,{680,y,290,60},data[i].detail,22,palette.muted);
+                }
+            } else if (layout == "omarchy") {
+                QStringList parts;
+                for (const Field &field : data) parts << field.label + "  " + field.value + (field.detail.isEmpty() ? QString() : "  " + field.detail);
+                text(painter,{40,345,1200,50},parts.join(QString::fromUtf8("     ·     ")),22,palette.foreground,false,Qt::AlignCenter);
+            } else if (layout == "clock") {
+                text(painter,{40,62,1200,220},QTime::currentTime().toString("HH:mm"),190,palette.foreground,true,Qt::AlignCenter);
+                text(painter,{40,272,1200,40},QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(),24,palette.muted,false,Qt::AlignCenter);
+                for (int i=0;i<count;++i) {
+                    double x = 40+i*1240.0/count;
+                    painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,332),QPointF(x+360,332));
+                    text(painter,{x,342,80,50},data[i].label,22,palette.accent,true);
+                    text(painter,{x+80,342,110,50},data[i].value,30,palette.foreground,true);
+                    text(painter,{x+190,342,200,50},data[i].detail,18,palette.muted);
+                }
+            } else if (layout == "gauges") {
+                for (int i=0;i<count;++i) {
+                    double cx = 40+i*1240.0/count+206, cy = 312, radius = 128;
+                    QRectF arc(cx-radius,cy-radius,2*radius,2*radius);
+                    // Half-dial of 0–100 °C with a tick every 10 °C.
+                    painter.setPen(QPen(palette.muted,1.5));
+                    for (int tick=0;tick<=10;++tick) {
+                        double angle = M_PI*(1-tick/10.0);
+                        painter.drawLine(QPointF(cx+std::cos(angle)*(radius+14),cy-std::sin(angle)*(radius+14)),QPointF(cx+std::cos(angle)*(radius+22),cy-std::sin(angle)*(radius+22)));
+                    }
+                    painter.setPen(QPen(palette.muted,14,Qt::SolidLine,Qt::FlatCap)); painter.setBrush(Qt::NoBrush); painter.drawArc(arc,180*16,-180*16);
+                    painter.setPen(QPen(palette.accent,14,Qt::SolidLine,Qt::FlatCap)); painter.drawArc(arc,180*16,-int(std::clamp(data[i].gauge,0.0,1.0)*180*16));
+                    text(painter,{cx-150,96,300,40},data[i].label,24,palette.accent,true,Qt::AlignCenter);
+                    text(painter,{cx-120,228,240,80},data[i].value,60,palette.foreground,true,Qt::AlignCenter);
+                    text(painter,{cx-190,326,380,40},data[i].detail,20,palette.muted,false,Qt::AlignCenter);
                 }
             } else for (int i=0;i<count;++i) {
                 double column = 1240.0 / count, x = 40+i*column;
@@ -728,13 +787,13 @@ public:
             else liveFile.cancelWriting();
         }
         QJsonArray themes, visuals;
-        const QStringList names = {"Focus", "Terminal", "Rings", "Dots"};
+        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy"};
         for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
         for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
-            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]}};
+            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
@@ -787,6 +846,8 @@ public:
             else return invalid();
             if(cleanEstimate(next)!=next) return invalid();
             settings["estimate"]=next; metrics.estimate=next; metrics.sample();
+        } else if(op=="fps") {
+            bool ok; int n=value.toInt(&ok); if(!ok||!frameRates.contains(n)) return invalid(); settings["fps"]=n;
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
         } else if(op=="reconnect") { usb.close(); lastConnect=0; }
@@ -822,10 +883,15 @@ public:
         if(!offline&&!usb.connected()&&now-lastConnect>=5000) { lastConnect=now; usb.open(); }
         if(!visual().isEmpty()&&now-lastAudioRetry>=5000) { lastAudioRetry=now; startAudio(); }
         bool game=settings["game"].toBool()&&metrics.cpu>75;
-        QString active=game?QString():visual();
-        if(now-lastFrame<(active.isEmpty()?1000:125)) return;
+        QString active=game?QString():visual(), layout=settings["layout"].toString();
+        bool animated=!active.isEmpty()||animatedLayouts.contains(layout);
+        // Static layouts change once a second at most; animations use the chosen rate.
+        int frameMs=animated?1000/settings["fps"].toInt(8):1000;
+        if(now-lastFrame<frameMs) return;
         if(!active.isEmpty()) analyze();
-        phase+=.125;
+        phase+=frameMs/1000.0;
+        if(active.isEmpty()&&layout=="matrix") rain.step();
+        if(active.isEmpty()&&layout=="omarchy") logo.step(frameMs/1000.0);
         QImage image=render(settings["layout"].toString(),active);
         if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
         lastFrame=now;
@@ -887,6 +953,20 @@ int main(int argc,char **argv) {
         ok=ok&&engine.palette.accent.name()=="#abcdef"&&engine.palette.background.name()=="#111111";
         ok=ok&&engine.command({{"command","status"},{"args",QJsonArray{"rings"}}})["ok"].toBool()&&QFileInfo::exists(engine.stateDir+"/previews/rings.png");
         ok=ok&&!engine.command({{"command","status"},{"args",QJsonArray{"../rings"}}})["ok"].toBool();
+        // Animations move only when stepped; frame rates are a fixed menu.
+        for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); }
+        ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
+        ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
+        ok=ok&&!engine.command({{"command","fps"},{"args",QJsonArray{"7"}}})["ok"].toBool()&&!engine.command({{"command","fps"},{"args",QJsonArray{"x"}}})["ok"].toBool();
+        // The branding art is plain text: control characters dropped, size capped,
+        // and a missing file keeps the art already loaded.
+        {
+            QFile art(testState.path()+"/art.txt");
+            ok=art.open(QIODevice::WriteOnly)&&ok; art.write("\x1b[31mAB\tC\nline2\n"+QByteArray(40000,'x')); art.close();
+            scenes::LogoScene scene; scene.load(art.fileName());
+            ok=ok&&scene.lines.size()==3&&scene.lines[0]=="[31mABC"&&scene.lines[2].size()==160;
+            scene.load(testState.path()+"/missing.txt"); ok=ok&&scene.lines.size()==3;
+        }
         // Fixed rows: CPU, GPU and RAM in every layout and orientation.
         ok=ok&&engine.fieldData().size()==3;
         ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{"cpu"}}})["ok"].toBool();

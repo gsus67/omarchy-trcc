@@ -23,7 +23,7 @@ Las pestañas del panel (Inicio está arriba; Consumo, en [Compatibilidad](#comp
   </tr>
 </table>
 
-Los cuatro diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
+Los ocho diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
 
 <table>
   <tr>
@@ -36,6 +36,16 @@ Los cuatro diseños propios tal como los muestra la Trofeo (1280×480, aquí a l
     <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
   </tr>
   <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-gauges.png" alt="Gauges" width="400"></td>
+    <td><img src="assets/gallery/lcd-clock.png" alt="Clock" width="400"></td>
+  </tr>
+  <tr><td align="center">Gauges</td><td align="center">Clock</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-matrix.png" alt="Matrix" width="400"></td>
+    <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
+  </tr>
+  <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
 </table>
 
 ## Funciones
@@ -46,7 +56,8 @@ Los cuatro diseños propios tal como los muestra la Trofeo (1280×480, aquí a l
 - Pestaña Temas con lista compacta y una sola vista previa desplegable que sigue los datos en vivo; ver un tema no lo aplica.
 - Pestaña Consumo en PCs de escritorio sin fuente con sensor: estima el resto del PC (placa, RAM, discos, ventiladores, refrigeración, RGB) y la pérdida de la fuente.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
-- Cuatro diseños nativos: **Focus, Terminal, Rings y Dots**. La pantalla también sigue automáticamente la paleta del sistema.
+- Ocho diseños nativos: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix y Omarchy**. Matrix (lluvia de caracteres) y Omarchy (tu logo de `~/.config/omarchy/branding/screensaver.txt` armándose con un efecto distinto en cada ciclo, como el protector de pantalla de Omarchy) son animados, con los datos encima. La pantalla también sigue automáticamente la paleta del sistema.
+- FPS de animación en Pantalla: 4, 8 (recomendado), 15 o 30, solo para los visuales y los diseños animados; los estáticos envían un fotograma por segundo.
 - Temperatura de CPU, GPU y RAM con carga y vatios, frecuencia de la CPU, VRAM y RAM en uso, consumo total, fecha y reloj. Un sensor no disponible se muestra como `—`.
 - Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).
 - Cuatro visuales propios: **Bars, Wave, Rings y Particles**, analizados desde la salida de audio del sistema. No usa el micrófono ni guarda audio.
@@ -61,7 +72,7 @@ Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`
 
 El consumo en vatios se lee sin root y sin cambiar permisos. Para el total de la PC se usa, por orden: una fuente Corsair HXi/RMi con USB (hwmon `corsairpsu`), la batería de un portátil mientras se descarga, o la suma CPU + GPU. La GPU sale de `amdgpu`/`nouveau`, del contador de energía de las GPU Intel dedicadas (`i915`/`xe`) o de NVML; se suman todas. Una GPU NVIDIA de portátil dormida cuenta como 0 W y no se despierta. Omarchy reserva a root el contador RAPL de la CPU por seguridad; el paso opcional `setup.sh` (más abajo) instala un servicio del sistema encerrado que publica solo vatios enteros una vez por segundo, así el plugin obtiene el consumo de la CPU sin acceso al contador. Sin él, la CPU muestra `—` y el total aparece como `≥ X W`. El panel muestra el total en Inicio y los vatios de cada componente en su cuadro; la Trofeo muestra el total en la cabecera de los diseños, junto a la fecha. La suma CPU + GPU no incluye placa, RAM, discos ni pérdidas de la fuente.
 
-Los diseños Focus, Terminal, Rings y Dots comparten un mismo diseño: la hora arriba con el consumo total y la fecha, y debajo CPU, GPU y RAM. Cada fila muestra la temperatura como valor y, a su lado, la carga y los vatios (RAM: uso). Sin sensor de RAM, la RAM muestra su uso. La línea de abajo muestra la frecuencia de la CPU (media de los núcleos / máxima), la VRAM de la GPU y la RAM en uso frente a sus totales.
+Todos los diseños propios comparten un mismo diseño: la hora arriba (grande en Clock) con el consumo total y la fecha, y debajo CPU, GPU y RAM. Cada fila muestra la temperatura como valor y, a su lado, la carga y los vatios (RAM: uso). Sin sensor de RAM, la RAM muestra su uso. La línea de abajo muestra la frecuencia de la CPU (media de los núcleos / máxima), la VRAM de la GPU y la RAM en uso frente a sus totales.
 
 En un PC de escritorio sin fuente con sensor ni batería, el panel añade la pestaña **Consumo** para estimar el resto del PC. Detecta los módulos de RAM (sensores DDR4/DDR5), los NVMe y los discos SATA internos; tú marcas el tamaño de la placa base, los ventiladores sin RGB y con RGB (cada uno en uno solo), la refrigeración por aire o líquida, las tiras RGB y la certificación 80 PLUS de la fuente. Con "≈ Incluir en el total" activado, el total pasa a `≈ X W`: CPU + GPU más esas piezas, dividido entre la eficiencia de la fuente (consumo en el enchufe); la pestaña desglosa cuánto aporta cada pieza. La fila de RAM muestra siempre los vatios estimados de sus módulos. Son valores típicos (DDR5 4 W, DDR4 3 W, NVMe 4 W, SSD SATA 2 W, HDD 6 W, ventilador 1,5 W, con RGB 3 W, bomba 5–7 W, tira RGB 4 W, placa 20–40 W), no mediciones: ningún sensor del PC los da.
 

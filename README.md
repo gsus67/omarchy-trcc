@@ -24,7 +24,7 @@ The panel tabs (Home is shown above; Power is under [Compatibility](#compatibili
   </tr>
 </table>
 
-The four built-in layouts as the Trofeo shows them (1280×480, here at half size):
+The eight built-in layouts as the Trofeo shows them (1280×480, here at half size):
 
 <table>
   <tr>
@@ -37,6 +37,16 @@ The four built-in layouts as the Trofeo shows them (1280×480, here at half size
     <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
   </tr>
   <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-gauges.png" alt="Gauges" width="400"></td>
+    <td><img src="assets/gallery/lcd-clock.png" alt="Clock" width="400"></td>
+  </tr>
+  <tr><td align="center">Gauges</td><td align="center">Clock</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-matrix.png" alt="Matrix" width="400"></td>
+    <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
+  </tr>
+  <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
 </table>
 
 ## Features
@@ -55,8 +65,13 @@ The four built-in layouts as the Trofeo shows them (1280×480, here at half size
   (board, RAM, drives, fans, cooling, RGB) and the PSU loss.
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
-- Four native layouts: **Focus, Terminal, Rings and Dots**. The screen also
-  follows the system palette automatically.
+- Eight native layouts: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix
+  and Omarchy**. Matrix (falling glyphs) and Omarchy (your
+  `~/.config/omarchy/branding/screensaver.txt` art assembling with a different
+  effect each cycle, like the Omarchy screensaver) are animated, with the data
+  on top. The screen also follows the system palette automatically.
+- Animation FPS in Display: 4, 8 (recommended), 15 or 30, for the visuals and the
+  animated layouts only; static layouts send one frame a second.
 - CPU, GPU and RAM temperature with load and watts, CPU clock, VRAM and RAM in
   use, total power, date and clock. A missing sensor is shown as `—`.
 - Software brightness, 0/90/180/270° rotation, metrics over the visuals and
@@ -95,7 +110,7 @@ as `≥ X W`. The panel shows the total on Home and each component's watts in it
 card; the Trofeo shows the total in the layouts' header, next to the date. CPU +
 GPU leaves out the board, RAM, drives and PSU losses.
 
-The Focus, Terminal, Rings and Dots layouts share one design: the time on top
+All built-in layouts share one design: the time on top (large in Clock)
 with the PC total and the date, then CPU, GPU and RAM. Each row shows the
 temperature as its value and, beside it, load and watts (RAM: use). Without a
 RAM sensor, RAM shows its use instead. The bottom line shows the CPU clock

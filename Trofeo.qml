@@ -397,6 +397,29 @@ Panel {
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
+            // Frame rate for animations only; static layouts stay at one frame a second.
+            PanelSectionHeader { text: root.t("FPS DE ANIMACIÓN"); foreground: root.barForeground }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: [4, 8, 15, 30]
+                Button {
+                  required property var modelData
+                  text: modelData === 8 ? "8 · " + root.t("recomendado") : String(modelData)
+                  selected: (root.lcdState.fps || 8) === modelData
+                  enabled: !root.busy
+                  onClicked: root.run(["fps", String(modelData)])
+                }
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: root.t("Solo para los visuales y los temas animados (Matrix, Omarchy). Más FPS, más fluido y más CPU.")
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
           }
 
           // Estimate for what has no sensor: detected parts plus what the user marks.

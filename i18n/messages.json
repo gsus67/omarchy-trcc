@@ -118,6 +118,9 @@
     "Placa base": "Motherboard",
     "Discos": "Drives",
     "Refrigeración": "Cooling",
-    "Ventiladores": "Fans"
+    "Ventiladores": "Fans",
+    "FPS DE ANIMACIÓN": "ANIMATION FPS",
+    "recomendado": "recommended",
+    "Solo para los visuales y los temas animados (Matrix, Omarchy). Más FPS, más fluido y más CPU.": "Only for the visuals and the animated themes (Matrix, Omarchy). More FPS is smoother and uses more CPU."
   }
 }

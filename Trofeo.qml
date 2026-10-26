@@ -97,7 +97,7 @@ Panel {
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
     function view(name: string): void {
-      if (name === "live" || name === "screen" || name === "themes" || name === "visuals") { root.page = name; root.open() }
+      if (name === "live" || name === "screen" || name === "themes" || name === "visuals" || name === "power") { root.page = name; root.open() }
     }
     function preview(id: string): void { root.expandedTheme = id; root.page = "themes"; root.open() }
     function status(): string {

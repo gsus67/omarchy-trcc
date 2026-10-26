@@ -565,7 +565,7 @@ public:
     std::array<double, 32> levels{};
     double phase = 0;
     AutoRate autoRate; QImage previousFrame;
-    scenes::MatrixRain rain;
+    scenes::MatrixRain rain, rainPortrait{24, 54};
     scenes::LogoScene logo;
     // Métricas FX: the metric rows assembling with the screensaver effects.
     scenes::LogoScene fx;
@@ -743,18 +743,7 @@ public:
             }
             painter.resetTransform();
         } else if (portrait) {
-            text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
-            text(painter, {30,25,420,60}, QTime::currentTime().toString("HH:mm"), 34, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
-            text(painter, {30,85,420,40}, palette.name + "  ·  " + headerInfo(), 20, palette.muted);
-            const QList<Field> data = fieldData();
-            for (int i = 0; i < data.size(); ++i) {
-                double y = 170 + i * 350;
-                text(painter, {30,y,420,45}, data[i].label, 27, palette.accent);
-                text(painter, {30,y+45,420,140}, data[i].value, 92, palette.foreground, true);
-                text(painter, {30,y+190,420,40}, data[i].detail, 20, palette.muted);
-            }
-            const QStringList lines = summary();
-            for (int i = 0; i < lines.size(); ++i) text(painter, {30,1130.+i*36,420,34}, lines[i], 20, palette.muted);
+            renderPortrait(painter, image, layout, preview);
         } else if (!audioVisual.isEmpty()) {
             QColor accent = settings["followAccent"].toBool() ? palette.accent : QColor::fromHsv(settings["visualHue"].toInt(), 170, 240);
             double power = *std::max_element(levels.begin(), levels.end());
@@ -807,11 +796,7 @@ public:
             } else if (layout == "omarchy" || layout == "picture" || layout == "fx") {
                 // ttfx (the Omarchy screensaver's effects, in color) when it runs
                 // for this layout; otherwise the built-in effects.
-                QRectF area = layout == "omarchy" ? QRectF(40,88,1200,250) : layout == "picture" ? QRectF(0,0,W,H) : QRectF(40,88,1200,300);
-                scenes::LogoScene &scene = layout == "omarchy" ? logo : layout == "picture" ? picture : fx;
-                if (layout == "fx") { fx.setText(fxRows()); ttfx.setLive(fxRows()); }
-                if (ttfxFor == layout && ttfx.started()) ttfx.draw(painter, area, palette.font, palette.foreground);
-                else scene.draw(painter, area, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+                drawScene(painter, layout, layout == "omarchy" ? QRectF(40,88,1200,250) : layout == "picture" ? QRectF(0,0,W,H) : QRectF(40,88,1200,300), preview);
                 if (layout == "picture") { painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,335,W,145), band); }
             }
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
@@ -895,6 +880,123 @@ public:
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));
         return image;
+    }
+    // Omarchy, Métricas FX and Picture FX art: ttfx (the Omarchy screensaver's
+    // effects, in color) when it runs for this layout, else the built-in effects.
+    void drawScene(QPainter &painter, const QString &layout, const QRectF &area, bool preview) {
+        scenes::LogoScene &scene = layout == "omarchy" ? logo : layout == "picture" ? picture : fx;
+        if (layout == "fx") { fx.setText(fxRows()); ttfx.setLive(fxRows()); }
+        if (ttfxFor == layout && ttfx.started()) ttfx.draw(painter, area, palette.font, palette.foreground);
+        else scene.draw(painter, area, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+    }
+    // A value drawn with dots (the Dots layout).
+    void dottedText(QPainter &painter, const QRectF &box, const QString &value, int size, const QColor &color) {
+        QImage mask(int(box.width()), int(box.height()), QImage::Format_ARGB32); mask.fill(Qt::transparent);
+        QPainter mp(&mask); QFont font(palette.font); font.setPixelSize(size); font.setBold(true); mp.setFont(font); mp.setPen(Qt::white);
+        mp.drawText(mask.rect(), Qt::AlignCenter, value); mp.end();
+        painter.setPen(Qt::NoPen); painter.setBrush(color);
+        for (int yy = 0; yy < mask.height(); yy += 5) for (int xx = 0; xx < mask.width(); xx += 5)
+            if (qAlpha(mask.pixel(xx, yy)) > 80) painter.drawEllipse(QPointF(box.x() + xx, box.y() + yy), 1.9, 1.9);
+    }
+    // Portrait (90°/270°): each layout redrawn for the 480×1280 screen.
+    void renderPortrait(QPainter &painter, QImage &image, const QString &layout, bool preview) {
+        const double width = H, height = W;
+        const QList<Field> data = fieldData();
+        QColor band = palette.background; band.setAlphaF(0.86);
+        // Full-screen backgrounds first, with bands that keep the text readable.
+        if (layout == "matrix") {
+            image.fill(palette.background.darker(160));
+            rainPortrait.draw(painter, palette.font, palette.foreground, palette.green);
+            painter.fillRect(QRectF(0,0,width,140), band); painter.fillRect(QRectF(0,1100,width,180), band);
+        } else if (layout == "picture") {
+            drawScene(painter, layout, {0,0,width,height}, preview);
+            painter.fillRect(QRectF(0,0,width,140), band); painter.fillRect(QRectF(0,960,width,320), band);
+        }
+        text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
+        if (layout != "clock") text(painter, {30,25,420,60}, QTime::currentTime().toString("HH:mm"), 34, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
+        text(painter, {30,85,420,40}, palette.name + "  ·  " + headerInfo(), 20, palette.muted);
+        // Three stacked slots for the CPU/GPU/RAM rows.
+        auto slotTop = [](int i) { return 160.0 + i * 310; };
+        if (layout == "terminal") {
+            text(painter, {30,150,420,50}, "> omarchy-trcc --status", 24, palette.green);
+            for (int i = 0; i < data.size(); ++i) {
+                double y = 240 + i * 280;
+                text(painter, {40,y,400,45}, data[i].label.toLower(), 30, palette.accent);
+                text(painter, {40,y+45,400,110}, data[i].value, 84, palette.foreground, true);
+                text(painter, {40,y+160,400,40}, data[i].detail, 24, palette.muted);
+            }
+        } else if (layout == "rings") {
+            for (int i = 0; i < data.size(); ++i) {
+                double top = slotTop(i), cy = top + 160;
+                text(painter, {30,top,420,40}, data[i].label, 26, palette.accent, true, Qt::AlignCenter);
+                painter.setPen(QPen(palette.muted,10)); painter.setBrush(Qt::NoBrush); painter.drawEllipse(QPointF(240,cy),105,105);
+                painter.setPen(QPen(palette.accent,10)); painter.drawArc(QRectF(135,cy-105,210,210),90*16,-int(data[i].ring*3.6*16));
+                text(painter, {90,cy-50,300,100}, data[i].value, 58, palette.foreground, true, Qt::AlignCenter);
+                text(painter, {30,cy+112,420,34}, data[i].detail, 20, palette.muted, false, Qt::AlignCenter);
+            }
+        } else if (layout == "gauges") {
+            for (int i = 0; i < data.size(); ++i) {
+                double top = slotTop(i), cx = 240, cy = top + 215, radius = 150;
+                text(painter, {30,top,420,40}, data[i].label, 26, palette.accent, true, Qt::AlignCenter);
+                painter.setPen(QPen(palette.muted,1.5));
+                for (int tick = 0; tick <= 10; ++tick) {
+                    double angle = M_PI*(1-tick/10.0);
+                    painter.drawLine(QPointF(cx+std::cos(angle)*(radius+14),cy-std::sin(angle)*(radius+14)),QPointF(cx+std::cos(angle)*(radius+22),cy-std::sin(angle)*(radius+22)));
+                }
+                QRectF arc(cx-radius,cy-radius,2*radius,2*radius);
+                painter.setPen(QPen(palette.muted,16,Qt::SolidLine,Qt::FlatCap)); painter.setBrush(Qt::NoBrush); painter.drawArc(arc,180*16,-180*16);
+                painter.setPen(QPen(palette.accent,16,Qt::SolidLine,Qt::FlatCap)); painter.drawArc(arc,180*16,-int(std::clamp(data[i].gauge,0.0,1.0)*180*16));
+                text(painter, {cx-130,cy-95,260,85}, data[i].value, 64, palette.foreground, true, Qt::AlignCenter);
+                text(painter, {30,cy+12,420,36}, data[i].detail, 20, palette.muted, false, Qt::AlignCenter);
+            }
+        } else if (layout == "clock") {
+            text(painter, {0,150,width,190}, QTime::currentTime().toString("HH:mm"), 126, palette.foreground, true, Qt::AlignCenter);
+            text(painter, {0,340,width,40}, QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(), 22, palette.muted, false, Qt::AlignCenter);
+            for (int i = 0; i < data.size(); ++i) {
+                double y = 440 + i * 210;
+                painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(40,y),QPointF(440,y));
+                text(painter, {40,y+15,400,40}, data[i].label, 26, palette.accent, true);
+                text(painter, {40,y+55,400,90}, data[i].value, 72, palette.foreground, true);
+                text(painter, {40,y+148,400,36}, data[i].detail, 20, palette.muted);
+            }
+        } else if (layout == "matrix") {
+            QPainterPath card; card.addRoundedRect(QRectF(30,200,420,840),18,18);
+            painter.fillPath(card, band); painter.setPen(QPen(palette.green,2)); painter.drawPath(card);
+            for (int i = 0; i < data.size(); ++i) {
+                double y = 240 + i * 270;
+                text(painter, {70,y,340,45}, data[i].label, 30, palette.green, true);
+                text(painter, {70,y+45,340,110}, data[i].value, 84, palette.foreground, true);
+                text(painter, {70,y+160,340,40}, data[i].detail, 22, palette.muted);
+            }
+        } else if (layout == "omarchy" || layout == "fx") {
+            // The art on top; Métricas FX is the rows themselves.
+            bool omarchy = layout == "omarchy";
+            drawScene(painter, layout, omarchy ? QRectF(20,150,440,300) : QRectF(20,170,440,880), preview);
+            if (omarchy)
+                for (int i = 0; i < data.size(); ++i) {
+                    double y = 500 + i * 190;
+                    text(painter, {40,y,400,40}, data[i].label, 26, palette.accent, true);
+                    text(painter, {40,y+40,400,90}, data[i].value, 72, palette.foreground, true);
+                    text(painter, {40,y+132,400,36}, data[i].detail, 20, palette.muted);
+                }
+        } else if (layout == "picture") {
+            for (int i = 0; i < data.size(); ++i)
+                text(painter, {30,980.+i*42,420,40}, data[i].label + "  " + data[i].value + "  " + data[i].detail, 22, palette.foreground);
+        } else {
+            // Focus and Dots.
+            for (int i = 0; i < data.size(); ++i) {
+                double y = slotTop(i);
+                text(painter, {30,y,420,45}, data[i].label, 27, palette.accent);
+                if (layout == "dots") dottedText(painter, {30,y+50,420,130}, data[i].value, 100, palette.foreground);
+                else text(painter, {30,y+45,420,140}, data[i].value, 92, palette.foreground, true);
+                if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(30,y+195),QPointF(420,y+195)); }
+                text(painter, {30,y+205,420,40}, data[i].detail, 20, palette.muted);
+            }
+        }
+        const QStringList lines = summary();
+        for (int i = 0; i < lines.size(); ++i) text(painter, {30,1130.+i*36,420,34}, lines[i], 20, layout == "matrix" || layout == "picture" ? palette.foreground : palette.muted);
+        QString version = pluginVersion();
+        text(painter, {30,1238,420,34}, fpsLabel() + (version.isEmpty() ? QString() : "  ·  v" + version), 15, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
     }
     // id must be a built-in layout or a stored custom theme (callers check).
     void preview(const QString &id) { render(id, "", true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+id+".png"); }
@@ -1097,7 +1199,7 @@ public:
         if(now-lastFrame<frameMs-frameMs/8) return;
         if(!active.isEmpty()) analyze();
         phase+=frameMs/1000.0;
-        if(active.isEmpty()&&layout=="matrix") rain.step(frameMs/1000.0);
+        if(active.isEmpty()&&layout=="matrix") { rain.step(frameMs/1000.0); rainPortrait.step(frameMs/1000.0); }
         // Omarchy, Métricas FX and Picture FX use ttfx when the system has it:
         // run an effect, hold the result, then the next one.
         bool useTtfx=active.isEmpty()&&(layout=="omarchy"||layout=="fx"||layout=="picture")&&scenes::TtfxScene::available();
@@ -1188,7 +1290,7 @@ int main(int argc,char **argv) {
         // The sender thread takes frames while the main thread asks about USB.
         for(int i=0;i<50;++i) { engine.sender.submit(QImage(W,H,QImage::Format_RGB32),0); ok=ok&&!engine.usbConnected(); }
         // Animations move only when stepped; frame rates are a fixed menu.
-        for(int i=0;i<40;++i) { engine.rain.step(.125); engine.logo.step(.25); engine.fx.step(.25); }
+        for(int i=0;i<40;++i) { engine.rain.step(.125); engine.rainPortrait.step(.125); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
         ok=ok&&!engine.render("fx","").isNull()&&engine.fx.lines.size()==3&&engine.fx.lines[0].startsWith("CPU");
         // ttfx output: moves, save/restore and truecolor land in the grid; other

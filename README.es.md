@@ -48,9 +48,9 @@ Los diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
   <tr>
     <td><img src="assets/gallery/lcd-fx.png" alt="Métricas FX" width="400"></td>
-    <td></td>
+    <td><img src="assets/gallery/lcd-picture.png" alt="Picture FX" width="400"></td>
   </tr>
-  <tr><td align="center">Métricas FX</td><td></td></tr>
+  <tr><td align="center">Métricas FX</td><td align="center">Picture FX</td></tr>
 </table>
 
 ## Funciones

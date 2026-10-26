@@ -49,9 +49,9 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
   <tr>
     <td><img src="assets/gallery/lcd-fx.png" alt="Metrics FX" width="400"></td>
-    <td></td>
+    <td><img src="assets/gallery/lcd-picture.png" alt="Picture FX" width="400"></td>
   </tr>
-  <tr><td align="center">Metrics FX</td><td></td></tr>
+  <tr><td align="center">Metrics FX</td><td align="center">Picture FX</td></tr>
 </table>
 
 ## Features

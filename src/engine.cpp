@@ -916,20 +916,32 @@ public:
     }
     // Turns a picture (≤ 20 MB) into text art in picture.txt, the same way
     // `omarchy branding screensaver image` does: Omarchy's own
-    // omarchy-transcode-ascii (ImageMagick, braille). Without it, a built-in
-    // block conversion of PNG/JPG/WebP. Returns an error message or "".
+    // omarchy-transcode-ascii (ImageMagick, braille). Qt decodes the file
+    // first (PNG/JPEG/WebP, or SVG when Qt can) under size limits, and
+    // ImageMagick only reads the clean PNG written here: it never sees the
+    // original, whose content could otherwise select one of its many coders.
+    // Without the tool, a built-in block conversion. Returns an error or "".
     QString pictureFrom(const QString &path) {
         QFileInfo input(path);
         if(!input.isFile()) return uiText("No se encontró el archivo seleccionado.");
         if(input.size()>20*1024*1024) return uiText("El archivo supera 20 MB.");
-        if(!QStringList{"png","jpg","jpeg","webp","svg"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP/SVG.");
+        QImageReader reader(input.canonicalFilePath());
+        reader.setAllocationLimit(256);
+        // Qt picks the decoder from the content; only these are accepted.
+        if(!QList<QByteArray>{"png","jpeg","webp","svg"}.contains(reader.format())) return uiText("Selecciona una imagen PNG/JPG/WebP/SVG.");
+        QSize size=reader.size();
+        if(!size.isValid()||size.width()>10000||size.height()>10000) return uiText("No se pudo leer la imagen.");
+        reader.setScaledSize(size.scaled(1200,1200,Qt::KeepAspectRatio));
+        QImage image=reader.read();
+        if(image.isNull()) return uiText("No se pudo leer la imagen.");
         if(!transcoder.isEmpty()) {
-            QString staging=stateDir+"/picture.new.txt";
+            QString source=stateDir+"/picture-source.png", staging=stateDir+"/picture.new.txt";
+            if(!image.convertToFormat(QImage::Format_ARGB32).save(source,"PNG")) return uiText("No se pudo guardar la imagen.");
             // Share of drawn cells in the result, or -1 when the conversion failed.
             auto run=[&](bool invert) -> double {
                 QFile::remove(staging);
                 QProcess convert; convert.setProcessChannelMode(QProcess::MergedChannels);
-                QStringList arguments{input.canonicalFilePath(),staging,"--width","150","--height","40"};
+                QStringList arguments{source,staging,"--width","150","--height","40"};
                 if(invert) arguments << "--invert";
                 convert.start(transcoder,arguments);
                 bool done=convert.waitForFinished(30000);
@@ -950,6 +962,7 @@ public:
                 if(inverted<0||inverted>=fill) { QFile::remove(staging); QFile::rename(first,staging); }
                 else { QFile::remove(first); fill=inverted; }
             }
+            QFile::remove(source);
             if(fill<0) {
                 QFile::remove(staging);
                 return uiText("No se pudo convertir la imagen (prueba un PNG o SVG con fondo transparente).");
@@ -959,13 +972,7 @@ public:
             picture.setSource(stateDir+"/picture.txt");
             return {};
         }
-        if(input.suffix().toLower()=="svg") return uiText("Selecciona una imagen PNG/JPG/WebP.");
-        QImageReader reader(input.canonicalFilePath());
-        reader.setAllocationLimit(256);
-        QSize size=reader.size();
-        if(!size.isValid()||size.width()>10000||size.height()>10000) return uiText("No se pudo leer la imagen.");
-        reader.setScaledSize(size.scaled(640,640,Qt::KeepAspectRatio));
-        QStringList art=scenes::imageToBlocks(reader.read());
+        QStringList art=scenes::imageToBlocks(image);
         if(art.isEmpty()) return uiText("No se pudo leer la imagen.");
         QSaveFile file(stateDir+"/picture.txt");
         if(!file.open(QIODevice::WriteOnly)) return uiText("No se pudo guardar la imagen.");
@@ -1129,6 +1136,15 @@ int main(int argc,char **argv) {
             tool.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner);
             engine.transcoder=fakeTool;
             ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
+            // The tool gets the clean copy, never the user's file, and it is removed after.
+            ok=ok&&!QFileInfo::exists(engine.stateDir+"/picture-source.png");
+            ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok;
+            tool.write("#!/bin/sh\ncase \"$1\" in */picture-source.png) printf 'OK\\n' > \"$2\";; *) exit 1;; esac\n"); tool.close();
+            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"OK"};
+            // Content decides: a script named .png never reaches the tool.
+            QFile disguised(testState.path()+"/trick.png"); ok=disguised.open(QIODevice::WriteOnly)&&ok;
+            disguised.write("push graphic-context\nviewbox 0 0 640 480\nimage over 0,0 0,0 'https://example.com/x'\npop graphic-context\n"); disguised.close();
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{disguised.fileName()}}})["ok"].toBool()&&engine.picture.lines==QStringList{"OK"};
             // Mostly filled output (light art on a dark picture) → the inverted run is kept.
             ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok;
             tool.write("#!/bin/sh\ncase \"$*\" in *--invert*) printf 'I    \\n' > \"$2\";; *) printf '\xe2\x96\x88\xe2\x96\x88\\n' > \"$2\";; esac\n"); tool.close();

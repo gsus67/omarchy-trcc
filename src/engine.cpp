@@ -414,9 +414,8 @@ struct Metrics {
         estimateAvailable = psuPower <= 0 && QDir(supplyDir).entryList({"BAT*"}, QDir::Dirs | QDir::System).isEmpty();
         int modules = dimms > 0 ? dimms : estimate["dimms"].toInt();
         ramPower = estimateAvailable && (dimms > 0 || estimate["enabled"].toBool()) ? modules * (ddr == "DDR4" ? ddr4Watts : ddr5Watts) : -1;
-        int fans = estimate["fans"].toInt();
         extraPower = estimateAvailable ? std::max(0.0, ramPower) + nvmes * nvmeWatts + ssds * ssdWatts + hdds * hddWatts
-            + boardWatts.value(estimate["board"].toString()) + fans * fanWatts + std::min(fans, estimate["rgbFans"].toInt()) * fanRgbWatts
+            + boardWatts.value(estimate["board"].toString()) + estimate["fans"].toInt() * fanWatts + estimate["rgbFans"].toInt() * (fanWatts + fanRgbWatts)
             + coolerWatts.value(estimate["cooler"].toString()) + estimate["rgbWatts"].toInt() : -1;
         powerPartial = false; powerEstimated = false;
         if (psuPower > 0) { power = psuPower; powerSource = "psu"; }
@@ -944,9 +943,9 @@ int main(int argc,char **argv) {
         Metrics d; d.sysRoot=desk.path(); d.procRoot=desk.path(); d.runRoot=desk.path()+"/run";
         // Off: RAM watts already show, the total stays CPU + GPU.
         d.sample(); ok=ok&&d.estimateAvailable&&d.dimms==2&&d.ddr=="DDR5"&&d.nvmes==1&&d.hdds==1&&d.ssds==0&&qFuzzyCompare(d.ramPower,8.0)&&d.powerText()=="120";
-        // On: 8 RAM + 4 NVMe + 6 HDD + 30 ATX + 3 fans 4.5 + 2 RGB 3 + pump 5 + 10 RGB = 70.5 W; Gold 90 %.
+        // On: 8 RAM + 4 NVMe + 6 HDD + 30 ATX + 3 plain fans 4.5 + 2 RGB fans 6 + pump 5 + 10 RGB = 73.5 W; Gold 90 %.
         d.estimate=QJsonObject{{"enabled",true},{"board","atx"},{"fans",3},{"rgbFans",2},{"cooler","pump"},{"rgbWatts",10},{"psu","gold"},{"dimms",2}};
-        d.sample(); ok=ok&&qFuzzyCompare(d.extraPower,70.5)&&d.powerSource=="estimate"&&d.powerText()==QString::fromUtf8("≈212");
+        d.sample(); ok=ok&&qFuzzyCompare(d.extraPower,73.5)&&d.powerSource=="estimate"&&d.powerText()==QString::fromUtf8("≈215");
         // A battery (laptop) turns the estimate off.
         QDir().mkpath(desk.path()+"/class/power_supply/BAT0");
         d.sample(); ok=ok&&!d.estimateAvailable&&d.ramPower<0&&d.powerText()=="120";

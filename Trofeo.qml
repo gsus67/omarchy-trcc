@@ -436,7 +436,7 @@ Panel {
             Repeater {
               model: [
                 {key: "dimms", name: "Módulos de RAM", step: 1, max: 8, unit: "", manual: true},
-                {key: "fans", name: "Ventiladores", step: 1, max: 20, unit: ""},
+                {key: "fans", name: "Ventiladores sin RGB", step: 1, max: 20, unit: ""},
                 {key: "rgbFans", name: "Ventiladores con RGB", step: 1, max: 20, unit: ""},
                 {key: "rgbWatts", name: "Otros RGB (tiras, etc.)", step: 5, max: 200, unit: " W"}
               ]

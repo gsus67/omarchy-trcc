@@ -925,13 +925,32 @@ public:
         if(!QStringList{"png","jpg","jpeg","webp","svg"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP/SVG.");
         if(!transcoder.isEmpty()) {
             QString staging=stateDir+"/picture.new.txt";
-            QFile::remove(staging);
-            QProcess convert; convert.setProcessChannelMode(QProcess::MergedChannels);
-            convert.start(transcoder,{input.canonicalFilePath(),staging,"--width","150","--height","40"});
-            bool done=convert.waitForFinished(30000);
-            if(!done) { convert.kill(); convert.waitForFinished(1000); }
-            QFileInfo result(staging);
-            if(!done||convert.exitCode()!=0||!result.isFile()||result.size()==0||result.size()>65536) {
+            // Share of drawn cells in the result, or -1 when the conversion failed.
+            auto run=[&](bool invert) -> double {
+                QFile::remove(staging);
+                QProcess convert; convert.setProcessChannelMode(QProcess::MergedChannels);
+                QStringList arguments{input.canonicalFilePath(),staging,"--width","150","--height","40"};
+                if(invert) arguments << "--invert";
+                convert.start(transcoder,arguments);
+                bool done=convert.waitForFinished(30000);
+                if(!done) { convert.kill(); convert.waitForFinished(1000); }
+                QFile result(staging);
+                if(!done||convert.exitCode()!=0||result.size()==0||result.size()>262144||!result.open(QIODevice::ReadOnly)) return -1;
+                QString art=QString::fromUtf8(result.readAll()); qsizetype drawn=0, cells=0;
+                for(QChar ch:art) if(ch!='\n') { ++cells; if(!ch.isSpace()&&ch!=QChar(0x2800)) ++drawn; }
+                return cells?double(drawn)/cells:-1;
+            };
+            // Omarchy expects a dark logo on a light or transparent background;
+            // when most of the result is filled (light art on a dark picture),
+            // the inverted conversion is kept if it draws less.
+            double fill=run(false);
+            if(fill>0.5) {
+                QString first=staging+".first"; QFile::remove(first); QFile::rename(staging,first);
+                double inverted=run(true);
+                if(inverted<0||inverted>=fill) { QFile::remove(staging); QFile::rename(first,staging); }
+                else { QFile::remove(first); fill=inverted; }
+            }
+            if(fill<0) {
                 QFile::remove(staging);
                 return uiText("No se pudo convertir la imagen (prueba un PNG o SVG con fondo transparente).");
             }
@@ -1103,8 +1122,12 @@ int main(int argc,char **argv) {
             tool.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner);
             engine.transcoder=fakeTool;
             ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
+            // Mostly filled output (light art on a dark picture) → the inverted run is kept.
+            ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok;
+            tool.write("#!/bin/sh\ncase \"$*\" in *--invert*) printf 'IN\\n' > \"$2\";; *) printf '\xe2\x96\x88\xe2\x96\x88\\n' > \"$2\";; esac\n"); tool.close();
+            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"IN"};
             ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok; tool.write("#!/bin/sh\nexit 1\n"); tool.close();
-            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"IN"};
             engine.settings["layout"]="focus";
         }
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;

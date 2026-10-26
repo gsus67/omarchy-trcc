@@ -289,6 +289,7 @@ public:
         width = textColumns + padColumns; height = int(text.size()) + padRows; homeRow = homeColumn = -1;
         chars = QVector<QChar>(qsizetype(width) * height, ' ');
         colors = QVector<QRgb>(qsizetype(width) * height, 0);
+        shownChars = chars; shownColors = colors; fresh = false;
         row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
         elapsed = 0; finishedAt = -1;
         process = std::make_unique<QProcess>();
@@ -314,10 +315,12 @@ public:
         elapsed += seconds;
         if (running() && elapsed < maxSeconds) return false;
         if (running()) stop();
-        if (finishedAt < 0) { finishedAt = elapsed; locate(); }
+        if (finishedAt < 0) { finishedAt = elapsed; commit(); locate(); }
         return elapsed - finishedAt >= holdSeconds;
     }
     bool animating() const { return running(); }
+    // True once per complete frame from ttfx, so the LCD only redraws on new frames.
+    bool takeFresh() { bool was = fresh; fresh = false; return was; }
     bool started() const { return !chars.isEmpty(); }
     // Parses ttfx output: printable text, newlines, ESC 7/8 (save/restore
     // cursor), CSI n A/B/C/D (moves) and SGR 38;2;r;g;b / 0 (colors).
@@ -349,7 +352,7 @@ public:
     // While holding, live text replaces the characters but keeps ttfx's final colors.
     void setLive(const QStringList &text) { if (!running() && text.size() == lines.size()) lines = text; }
     void draw(QPainter &painter, const QRectF &area, const QString &family, const QColor &fallback) const {
-        if (chars.isEmpty()) return;
+        if (shownChars.isEmpty()) return;
         QFont font(family); font.setPixelSize(100);
         double ratio = QFontMetricsF(font).horizontalAdvance('M') / 100.0;
         double size = std::min(area.height() / height / 1.15, area.width() / width / std::max(0.1, ratio));
@@ -361,8 +364,8 @@ public:
         int top = homeRow, left = homeColumn;
         for (int r = 0; r < height; ++r)
             for (int c = 0; c < width; ++c) {
-                QChar ch = chars[qsizetype(r) * width + c];
-                QRgb rgb = colors[qsizetype(r) * width + c];
+                QChar ch = shownChars.value(qsizetype(r) * width + c, ' ');
+                QRgb rgb = shownColors.value(qsizetype(r) * width + c, 0);
                 // Holding: show the live text at its home cells.
                 if (!running() && top >= 0 && r >= top && r - top < lines.size() && c >= left) {
                     const QString &line = lines[r - top];
@@ -385,13 +388,18 @@ public:
     void prepare(int columns, int rowsWanted) {
         stop(); width = columns; height = rowsWanted; textColumns = columns; lines.clear(); homeRow = homeColumn = -1;
         chars = QVector<QChar>(qsizetype(width) * height, ' '); colors = QVector<QRgb>(qsizetype(width) * height, 0);
+        shownChars = chars; shownColors = colors; fresh = false;
         row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
     }
+    QChar shownAt(int r, int c) const { return shownChars.value(qsizetype(r) * width + c); }
 private:
     enum State { Normal, Escape, Csi };
     std::unique_ptr<QProcess> process;
     QStringList lines;
-    QVector<QChar> chars; QVector<QRgb> colors;
+    // Written as ttfx outputs, and the last complete frame (what is drawn).
+    QVector<QChar> chars, shownChars; QVector<QRgb> colors, shownColors;
+    bool fresh = false;
+    void commit() { shownChars = chars; shownColors = colors; fresh = true; }
     int width = 0, height = 0, textColumns = 1, row = 0, col = 0, savedRow = 0, savedCol = 0;
     State state = Normal; QString params; QRgb current = 0;
     QStringDecoder decoder{QStringDecoder::Utf8};
@@ -414,8 +422,10 @@ private:
     void csi(ushort final) {
         QStringList parts = params.split(';');
         int n = std::max(1, parts.value(0).toInt());
-        // A terminal never moves the cursor above the first row; ttfx relies on it.
-        if (final == 'A') row = std::max(0, row - n); else if (final == 'B') row += n;
+        // A terminal never moves the cursor above the first row; ttfx relies on
+        // it. Moving up is also where ttfx starts each frame: the one just
+        // written is complete, so it becomes the frame on show.
+        if (final == 'A') { row = std::max(0, row - n); commit(); } else if (final == 'B') row += n;
         else if (final == 'C') col += n; else if (final == 'D') col = std::max(0, col - n);
         else if (final == 'm') {
             for (int i = 0; i < parts.size(); ++i) {

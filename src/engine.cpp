@@ -1015,7 +1015,8 @@ public:
         if(useTtfx) {
             if(ttfxFor!=layout||!ttfx.started()||ttfx.step(frameMs/1000.0)) {
                 if(layout=="omarchy") logo.load(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/omarchy/branding/screensaver.txt");
-                int fps=settings["fps"].toInt(); // Omarchy FX gets a tight canvas so its few rows are drawn large.
+                // Omarchy FX gets a tight canvas so its few rows are drawn large.
+                int fps=settings["fps"].toInt();
                 ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:15,layout=="fx"?4:8,layout=="fx"?2:4);
                 ttfxFor=layout;
             }
@@ -1025,6 +1026,9 @@ public:
             if(active.isEmpty()&&layout=="fx") fx.step(frameMs/1000.0);
             if(active.isEmpty()&&layout=="picture") picture.step(frameMs/1000.0);
         }
+        // While ttfx plays, send a frame only when it has finished a new one:
+        // no half-drawn frames and no repeats, so the motion is even.
+        if(useTtfx&&ttfxFor==layout&&ttfx.animating()&&!ttfx.takeFresh()) return;
         QImage image=render(settings["layout"].toString(),active);
         if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
         lastFrame=now;
@@ -1096,6 +1100,9 @@ int main(int argc,char **argv) {
             scenes::TtfxScene grid; grid.prepare(6,2);
             grid.feed(QByteArray("\x1b[?25l\x1b" "7AB\n\x1b[38;2;255;0;0mC\x1b[0mD\x1b" "8\x1b[1BXYZWVUTS\x1b[5A\x1b[99Cq"));
             ok=ok&&grid.at(0,0)=='A'&&grid.at(0,1)=='B'&&grid.at(1,0)=='X'&&grid.at(1,5)=='U'&&grid.colorAt(1,0)==0;
+            // Frames show only once complete: the move up to the top commits them.
+            ok=ok&&grid.takeFresh()&&grid.shownAt(1,0)=='X'&&!grid.takeFresh();
+            grid.feed(QByteArray("\nN")); ok=ok&&grid.shownAt(1,0)=='X'&&!grid.takeFresh();
             grid.prepare(4,1); grid.feed(QByteArray("\x1b[38;2;10;20;30mZ")); ok=ok&&grid.at(0,0)=='Z'&&grid.colorAt(0,0)==(qRgb(10,20,30)|0xff000000);
             grid.feed(QByteArray("\xe2\x96")); grid.feed(QByteArray("\x88")); ok=ok&&grid.at(0,1)==QChar(0x2588);
         }

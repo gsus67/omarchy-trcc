@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.6
+# omarchy-trcc · v0.0.8
 
 [English](README.md) · **Español**
 
@@ -22,7 +22,7 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ## Compatibilidad
 
-v0.0.6 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+v0.0.8 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
 Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`, `i915`, `xe`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. Con el driver propietario de NVIDIA, consumo, temperatura y carga de la GPU salen de NVML, la librería que Omarchy instala con `nvidia-utils` (la misma que usa `nvidia-smi`).
 

@@ -1,0 +1,67 @@
+# Installed by setup.sh as /etc/systemd/system/omarchy-trcc-power.service.
+# Publishes the CPU power as whole watts in /run/omarchy-trcc-power/cpu-watts
+# so the plugin never needs access to the RAPL energy counter (see
+# bin/power-relay.sh). Runs as root only because root owns that counter; it
+# has no capabilities and is sandboxed so it can do nothing else.
+[Unit]
+Description=Omarchy TRCC CPU power relay (whole watts from RAPL)
+ConditionPathExists=/sys/class/powercap/intel-rapl:0/energy_uj
+
+[Service]
+Type=simple
+# A root-owned copy: never a file from the user-writable plugin folder.
+ExecStart=/usr/local/libexec/omarchy-trcc-power
+Restart=on-failure
+RestartSec=10
+RuntimeDirectory=omarchy-trcc-power
+RuntimeDirectoryMode=0755
+UMask=0022
+Nice=10
+
+# No privileges: root without capabilities can still read the root-owned
+# counter, and nothing more.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+SecureBits=noroot-locked
+RestrictSUIDSGID=yes
+
+# Read-only system, no home, no devices, no network, no IPC.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=none
+PrivateIPC=yes
+RemoveIPC=yes
+# PrivateUsers stays off: it would map root to nobody and hide the counter.
+KeyringMode=private
+
+# Kernel and process isolation.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @debug @cpu-emulation @obsolete @raw-io @reboot @swap @module @clock
+SystemCallErrorNumber=EPERM
+
+# Bounded resources.
+MemoryMax=32M
+TasksMax=8
+CPUQuota=5%
+
+[Install]
+WantedBy=multi-user.target

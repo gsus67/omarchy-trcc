@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.6
+# omarchy-trcc · v0.0.8
 
 **English** · [Español](README.es.md)
 
@@ -7,6 +7,38 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 
 ![Current omarchy-trcc panel with live data](preview.png)
 
+## Gallery
+
+The panel tabs (Home is shown above; Power is under [Compatibility](#compatibility)):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/panel-display.png" alt="Display" width="260"></td>
+    <td><img src="assets/gallery/panel-themes.png" alt="Themes" width="260"></td>
+    <td><img src="assets/gallery/panel-visuals.png" alt="Visuals" width="260"></td>
+  </tr>
+  <tr>
+    <td align="center">Display</td>
+    <td align="center">Themes</td>
+    <td align="center">Visuals</td>
+  </tr>
+</table>
+
+The four built-in layouts as the Trofeo shows them (1280×480, here at half size):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/lcd-focus.png" alt="Focus" width="400"></td>
+    <td><img src="assets/gallery/lcd-terminal.png" alt="Terminal" width="400"></td>
+  </tr>
+  <tr><td align="center">Focus</td><td align="center">Terminal</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-rings.png" alt="Rings" width="400"></td>
+    <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
+  </tr>
+  <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+</table>
+
 ## Features
 
 - **🖥 TR** button in the bar; panel with the colors, fonts, borders and spacing
@@ -14,17 +46,19 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 - Automatic language from `LC_ALL`, `LC_MESSAGES` and `LANG`: English/Spanish,
   with English as the fallback for other languages. Panel, messages and native
   labels share one catalog; the text in your own themes is kept as is.
-- Home view with CPU/GPU/RAM temperature (when sensors exist), load, used memory
-  and a preview of the screen; refreshed every two seconds while the panel is
-  open.
-- Themes tab with a compact list and a single expandable preview; previewing a
-  theme does not apply it.
+- Home view with CPU/GPU/RAM temperature (when sensors exist), load, watts, used
+  memory and a preview of the screen; refreshed every two seconds while the
+  panel is open.
+- Themes tab with a compact list and a single expandable preview that follows
+  live values; previewing a theme does not apply it.
+- Power tab on desktops without a PSU sensor: estimates the rest of the PC
+  (board, RAM, drives, fans, cooling, RGB) and the PSU loss.
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
 - Four native layouts: **Focus, Terminal, Rings and Dots**. The screen also
   follows the system palette automatically.
-- CPU and GPU temperature/load, RAM usage, date and clock. A missing sensor is
-  shown as `—`.
+- CPU, GPU and RAM temperature with load and watts, CPU clock, VRAM and RAM in
+  use, total power, date and clock. A missing sensor is shown as `—`.
 - Software brightness, 0/90/180/270° rotation, metrics over the visuals and
   game mode (goes back to the metrics panel when CPU >75%).
 - Four built-in audio visuals: **Bars, Wave, Rings and Particles**, analyzed
@@ -36,17 +70,52 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 
 ## Compatibility
 
-v0.0.6 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
+v0.0.8 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
 checks the panel identity on connect and rejects other geometries. It is not
 compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
 shares the USB ID.
 
-Temperatures come from hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`,
-`nouveau`), CPU/RAM load from `/proc` and GPU load from the DRM
+Temperatures come from hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`,
+`i915`, `xe`), CPU/RAM load from `/proc` and GPU load from the DRM
 `gpu_busy_percent` node. RAM temperature comes from `spd5118`/`jc42` sensors and
-shows the highest available value. Proprietary NVIDIA telemetry is not included
-yet. This version draws its own layouts and visuals; it does not import TRCC
-`.dc` themes, KarmaViz shaders or presets.
+shows the highest available value. With NVIDIA's proprietary driver, GPU power,
+temperature and load come from NVML, the library Omarchy installs with
+`nvidia-utils` (the one `nvidia-smi` uses).
+
+Power draw in watts is read without root and without changing permissions. The
+PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon `corsairpsu`), a
+laptop battery while discharging, or CPU + GPU. GPU power comes from
+`amdgpu`/`nouveau`, the energy counter of Intel discrete GPUs (`i915`/`xe`) or
+NVML; all GPUs are added. A sleeping NVIDIA laptop GPU counts as 0 W and is not
+woken up. Omarchy keeps the CPU's RAPL energy counter root-only for security;
+the optional `setup.sh` step (below) installs a sandboxed system service that
+publishes only whole watts once per second, so the plugin gets the CPU power
+without access to the counter. Without it the CPU shows `—` and the total shows
+as `≥ X W`. The panel shows the total on Home and each component's watts in its
+card; the Trofeo shows the total in the layouts' header, next to the date. CPU +
+GPU leaves out the board, RAM, drives and PSU losses.
+
+The Focus, Terminal, Rings and Dots layouts share one design: the time on top
+with the PC total and the date, then CPU, GPU and RAM. Each row shows the
+temperature as its value and, beside it, load and watts (RAM: use). Without a
+RAM sensor, RAM shows its use instead. The bottom line shows the CPU clock
+(average of the cores / top), the GPU's VRAM and the RAM in use against their
+totals.
+
+On a desktop without a PSU sensor or battery the panel adds a **Power** tab to
+estimate the rest of the PC. RAM modules (DDR4/DDR5 sensors), NVMe and internal
+SATA drives are detected; you mark the motherboard size, fans without and with
+RGB (each fan in one of them), air or liquid cooling, RGB strips and the PSU's 80 PLUS rating. With "≈ Include
+in total" on, the total becomes `≈ X W`: CPU + GPU plus those parts,
+divided by the PSU's efficiency (wall power); the tab lists each part's share. The RAM row always shows its
+modules' estimated watts. These are typical values (DDR5 4 W, DDR4 3 W, NVMe
+4 W, SATA SSD 2 W, HDD 6 W, fan 1.5 W, RGB fan 3 W, pump 5–7 W, RGB strip 4 W, board
+20–40 W), not measurements: no PC sensor reports them.
+
+![Power tab estimating the rest of the PC](assets/gallery/panel-power.png)
+
+This version draws its own layouts and visuals; it does not import TRCC `.dc`
+themes, KarmaViz shaders or presets.
 
 ## Requirements
 
@@ -78,15 +147,24 @@ To update:
 omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
-If USB permission is missing, run from a terminal:
+For USB permission and the CPU power reading, run once from a terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup.sh
 ```
 
-That optional step asks for sudo to install a `uaccess` rule limited to
-`0416:5302`. It does not grant global USB write access. Close any other driver
-already using the screen before starting the engine.
+That optional step asks for sudo once and installs only root-owned copies:
+
+- a `uaccess` rule limited to `0416:5302`. It does not grant global USB write
+  access. Close any other driver already using the screen before starting the
+  engine.
+- if the CPU has RAPL, `omarchy-trcc-power.service` and its script
+  `/usr/local/libexec/omarchy-trcc-power`. It reads the energy counter once
+  per second and writes only whole watts to `/run/omarchy-trcc-power/cpu-watts`,
+  which defeats attacks that need fine-grained readings (Platypus,
+  CVE-2020-8694); the counter itself stays root-only. It runs without any
+  capabilities, network, home or devices, on a read-only system (systemd
+  exposure 0.7/10), and never runs files from the plugin folder.
 
 ## Usage
 
@@ -129,8 +207,10 @@ and `color`. Colors can be `background`, `foreground`, `accent`, `muted`,
 `green` (they follow Omarchy) or `#RRGGBB`.
 
 Text can include `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`,
-`{gpu_load}`, `{ram}`, `{time}`, `{date}` and `{theme}`. Temperatures are
-numbers in °C; `{ram}` is the used memory percentage. Missing sensors show as
+`{gpu_load}`, `{ram}`, `{cpu_power}`, `{gpu_power}`, `{power}`, `{time}`, `{date}`
+and `{theme}`. Temperatures are numbers in °C; `{ram}` is the used memory
+percentage; power values are watts and `{power}` is the PC total (prefixed with
+`≥` when a component is missing). Missing sensors show as
 `—`.
 
 Optionally, `background` names a 1280×480 image in the same folder as the JSON,
@@ -149,8 +229,9 @@ The install uses only:
 - `~/.local/state/omarchy-trcc/` for settings, imported themes, previews and a
   single live image that gets overwritten
 - Temporary socket/lock in `$XDG_RUNTIME_DIR`
-- Optionally, `/etc/udev/rules.d/70-omarchy-trcc.rules` if you ran
-  `setup-usb.sh`
+- Optionally, if you ran `setup.sh`: `/etc/udev/rules.d/70-omarchy-trcc.rules`,
+  `/etc/systemd/system/omarchy-trcc-power.service` and
+  `/usr/local/libexec/omarchy-trcc-power` (`uninstall.sh --purge` removes them)
 
 It respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`. The built binary lives in
 `~/.local/state/omarchy-trcc/bin/`; the temporary build is deleted. Normal

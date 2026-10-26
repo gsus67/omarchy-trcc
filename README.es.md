@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.6
+# omarchy-trcc · v0.0.8
 
 [English](README.md) · **Español**
 
@@ -6,15 +6,48 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ![Panel actual de omarchy-trcc con datos en vivo](preview.png)
 
+## Galería
+
+Las pestañas del panel (Inicio está arriba; Consumo, en [Compatibilidad](#compatibilidad)):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/panel-display.png" alt="Pantalla" width="260"></td>
+    <td><img src="assets/gallery/panel-themes.png" alt="Temas" width="260"></td>
+    <td><img src="assets/gallery/panel-visuals.png" alt="Visuales" width="260"></td>
+  </tr>
+  <tr>
+    <td align="center">Pantalla</td>
+    <td align="center">Temas</td>
+    <td align="center">Visuales</td>
+  </tr>
+</table>
+
+Los cuatro diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/lcd-focus.png" alt="Focus" width="400"></td>
+    <td><img src="assets/gallery/lcd-terminal.png" alt="Terminal" width="400"></td>
+  </tr>
+  <tr><td align="center">Focus</td><td align="center">Terminal</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-rings.png" alt="Rings" width="400"></td>
+    <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
+  </tr>
+  <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+</table>
+
 ## Funciones
 
 - Botón **🖥 TR** en la barra; panel con los colores, fuentes, bordes y espaciado del tema activo de Omarchy.
 - Idioma automático según `LC_ALL`, `LC_MESSAGES` y `LANG`: inglés/español, con inglés como respaldo para otros idiomas. Panel, mensajes y etiquetas nativas comparten el catálogo; los textos de tus propios temas se conservan.
-- Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
-- Pestaña Temas con lista compacta y una sola vista previa desplegable; ver un tema no lo aplica.
+- Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, vatios, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
+- Pestaña Temas con lista compacta y una sola vista previa desplegable que sigue los datos en vivo; ver un tema no lo aplica.
+- Pestaña Consumo en PCs de escritorio sin fuente con sensor: estima el resto del PC (placa, RAM, discos, ventiladores, refrigeración, RGB) y la pérdida de la fuente.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
 - Cuatro diseños nativos: **Focus, Terminal, Rings y Dots**. La pantalla también sigue automáticamente la paleta del sistema.
-- Temperatura/carga CPU y GPU, uso de RAM, fecha y reloj. Un sensor no disponible se muestra como `—`.
+- Temperatura de CPU, GPU y RAM con carga y vatios, frecuencia de la CPU, VRAM y RAM en uso, consumo total, fecha y reloj. Un sensor no disponible se muestra como `—`.
 - Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).
 - Cuatro visuales propios: **Bars, Wave, Rings y Particles**, analizados desde la salida de audio del sistema. No usa el micrófono ni guarda audio.
 - Seguimiento opcional del acento, activado inicialmente; cuando se desactiva se conserva un color fijo.
@@ -22,9 +55,19 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ## Compatibilidad
 
-v0.0.6 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
+v0.0.8 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor valida la identidad del panel al conectarse y rechaza otras geometrías. No es compatible con la Trofeo 9,16″/11,3″ ni con todas las pantallas Thermalright que comparten USB ID.
 
-Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`, `nouveau`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. No incluye aún telemetría propietaria de NVIDIA. Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
+Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`, `i915`, `xe`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. Con el driver propietario de NVIDIA, consumo, temperatura y carga de la GPU salen de NVML, la librería que Omarchy instala con `nvidia-utils` (la misma que usa `nvidia-smi`).
+
+El consumo en vatios se lee sin root y sin cambiar permisos. Para el total de la PC se usa, por orden: una fuente Corsair HXi/RMi con USB (hwmon `corsairpsu`), la batería de un portátil mientras se descarga, o la suma CPU + GPU. La GPU sale de `amdgpu`/`nouveau`, del contador de energía de las GPU Intel dedicadas (`i915`/`xe`) o de NVML; se suman todas. Una GPU NVIDIA de portátil dormida cuenta como 0 W y no se despierta. Omarchy reserva a root el contador RAPL de la CPU por seguridad; el paso opcional `setup.sh` (más abajo) instala un servicio del sistema encerrado que publica solo vatios enteros una vez por segundo, así el plugin obtiene el consumo de la CPU sin acceso al contador. Sin él, la CPU muestra `—` y el total aparece como `≥ X W`. El panel muestra el total en Inicio y los vatios de cada componente en su cuadro; la Trofeo muestra el total en la cabecera de los diseños, junto a la fecha. La suma CPU + GPU no incluye placa, RAM, discos ni pérdidas de la fuente.
+
+Los diseños Focus, Terminal, Rings y Dots comparten un mismo diseño: la hora arriba con el consumo total y la fecha, y debajo CPU, GPU y RAM. Cada fila muestra la temperatura como valor y, a su lado, la carga y los vatios (RAM: uso). Sin sensor de RAM, la RAM muestra su uso. La línea de abajo muestra la frecuencia de la CPU (media de los núcleos / máxima), la VRAM de la GPU y la RAM en uso frente a sus totales.
+
+En un PC de escritorio sin fuente con sensor ni batería, el panel añade la pestaña **Consumo** para estimar el resto del PC. Detecta los módulos de RAM (sensores DDR4/DDR5), los NVMe y los discos SATA internos; tú marcas el tamaño de la placa base, los ventiladores sin RGB y con RGB (cada uno en uno solo), la refrigeración por aire o líquida, las tiras RGB y la certificación 80 PLUS de la fuente. Con "≈ Incluir en el total" activado, el total pasa a `≈ X W`: CPU + GPU más esas piezas, dividido entre la eficiencia de la fuente (consumo en el enchufe); la pestaña desglosa cuánto aporta cada pieza. La fila de RAM muestra siempre los vatios estimados de sus módulos. Son valores típicos (DDR5 4 W, DDR4 3 W, NVMe 4 W, SSD SATA 2 W, HDD 6 W, ventilador 1,5 W, con RGB 3 W, bomba 5–7 W, tira RGB 4 W, placa 20–40 W), no mediciones: ningún sensor del PC los da.
+
+![Pestaña Consumo estimando el resto del PC](assets/gallery/panel-power.png)
+
+Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 
 ## Instalación
 
@@ -44,13 +87,16 @@ Para actualizar:
 omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
-Si falta permiso USB, ejecuta desde una terminal:
+Para el permiso USB y el consumo de la CPU, ejecuta una vez desde una terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup.sh
 ```
 
-Ese paso opcional solicita sudo para instalar una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
+Ese paso opcional pide sudo una sola vez e instala únicamente copias propiedad de root:
+
+- una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
+- si la CPU tiene RAPL, `omarchy-trcc-power.service` y su script `/usr/local/libexec/omarchy-trcc-power`. Lee el contador de energía una vez por segundo y escribe solo vatios enteros en `/run/omarchy-trcc-power/cpu-watts`, lo que inutiliza los ataques que necesitan lecturas finas (Platypus, CVE-2020-8694); el contador sigue siendo solo de root. Corre sin capacidades, sin red, sin carpeta personal ni dispositivos, con el sistema en solo lectura (exposición de systemd 0,7/10), y nunca ejecuta archivos de la carpeta del plugin.
 
 ## Uso
 
@@ -79,7 +125,7 @@ python ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/bin/trofeo import
 
 El formato usa `schema: 1`, `width: 1280`, `height: 480`, un `name` y una lista `elements`. Cada elemento `type: "text"` define `text`, `x`, `y`, `width`, `height` y `fontSize`; admite `bold`, `align` (`left`, `center`, `right`) y `color`. Los colores pueden ser `background`, `foreground`, `accent`, `muted`, `green` (siguen Omarchy) o `#RRGGBB`.
 
-Los textos pueden incluir `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`, `{gpu_load}`, `{ram}`, `{time}`, `{date}` y `{theme}`. Las temperaturas son números en °C; `{ram}` es el porcentaje de memoria usada. Los sensores ausentes se muestran como `—`.
+Los textos pueden incluir `{cpu_temp}`, `{gpu_temp}`, `{ram_temp}`, `{cpu_load}`, `{gpu_load}`, `{ram}`, `{cpu_power}`, `{gpu_power}`, `{power}`, `{time}`, `{date}` y `{theme}`. Las temperaturas son números en °C; `{ram}` es el porcentaje de memoria usada; los consumos están en vatios; `{power}` es el total de la PC (lleva `≥` delante si falta un componente). Los sensores ausentes se muestran como `—`.
 
 Opcionalmente, `background` indica una imagen de 1280×480 dentro de la misma carpeta del JSON, por ejemplo `"background": "fondo.png"`. Se guarda una copia normalizada; el tema importado no depende del archivo original. `backgroundColor` acepta los mismos colores que los textos. Los temas solo contienen datos, sin scripts ni código ejecutable. No son temas `.dc` de TRCC.
 
@@ -92,7 +138,7 @@ La instalación usa únicamente:
 - Una entrada `io.github.gsus67.omarchy-trcc` en la barra de `shell.json`
 - `~/.local/state/omarchy-trcc/` para ajustes, temas importados, vistas previas y una única imagen en vivo que se sobrescribe
 - Socket/bloqueo temporales en `$XDG_RUNTIME_DIR`
-- Opcionalmente, `/etc/udev/rules.d/70-omarchy-trcc.rules` si ejecutaste `setup-usb.sh`
+- Opcionalmente, si ejecutaste `setup.sh`: `/etc/udev/rules.d/70-omarchy-trcc.rules`, `/etc/systemd/system/omarchy-trcc-power.service` y `/usr/local/libexec/omarchy-trcc-power` (`uninstall.sh --purge` los quita)
 
 Respeta `XDG_CONFIG_HOME` y `XDG_STATE_HOME`. El binario compilado queda en `~/.local/state/omarchy-trcc/bin/`; la compilación temporal se borra. La eliminación normal del plugin también retira el motor y su unidad de usuario, conservando tus ajustes y temas personalizados.
 

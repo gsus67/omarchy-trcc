@@ -16,6 +16,9 @@ from i18n import translate as tr
 
 QT_MODULES = ("Qt6Core", "Qt6Gui", "Qt6Network", "libusb-1.0")
 BUILD_FLAGS = ("-std=c++17", "-O2", "-fPIC", "-Wall", "-Wextra", "-Wpedantic")
+# CI only: AddressSanitizer + UndefinedBehaviorSanitizer abort the self-tests on
+# out-of-bounds access, use-after-free, overflow or other undefined behaviour.
+SANITIZE_FLAGS = ("-O1", "-g", "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=all")
 
 
 def run(*command):
@@ -61,7 +64,7 @@ def write_resources(source, output):
     ET.ElementTree(document).write(output, encoding="utf-8", xml_declaration=True)
 
 
-def build(source, output, *, tools=None, tests=False):
+def build(source, output, *, tools=None, tests=False, sanitize=False):
     source, output = Path(source).resolve(), Path(output).resolve()
     tools = tools or discover()
     output.mkdir(parents=True, exist_ok=True)
@@ -71,7 +74,7 @@ def build(source, output, *, tools=None, tests=False):
     run(tools["rcc"], "--name", "translations", str(qrc), "-o", str(resources))
     # pkg-config quotes/escapes paths; parse those flags without invoking a shell.
     flags = shlex.split(run(tools["pkg_config"], "--cflags", "--libs", *QT_MODULES))
-    common = [tools["compiler"], *BUILD_FLAGS, "-I", str(source / "src")]
+    common = [tools["compiler"], *BUILD_FLAGS, *(SANITIZE_FLAGS if sanitize else ()), "-I", str(source / "src")]
     binary = output / "trofeo-engine"
     run(*common, str(source / "src/engine.cpp"), str(source / "src/themes.cpp"),
         str(resources), *flags, "-o", str(binary))
@@ -79,6 +82,9 @@ def build(source, output, *, tools=None, tests=False):
         theme_test = output / "themes-test"
         run(*common, str(source / "tests/themes_test.cpp"), str(source / "src/themes.cpp"),
             str(resources), *flags, "-o", str(theme_test))
+        fake_nvml = output / "libfake-nvml.so"
+        run(*common, "-shared", str(source / "tests/fake_nvml.cpp"), "-o", str(fake_nvml))
+        os.environ["TROFEO_TEST_NVML"] = str(fake_nvml)
         print(run(str(binary), "--self-test"), end="")
         print(run(str(theme_test)), end="")
     return binary
@@ -88,14 +94,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, help="Keep binaries in this directory")
     parser.add_argument("--test", action="store_true", help="Build and run the native checks without USB access")
+    parser.add_argument("--sanitize", action="store_true", help="Build with ASan/UBSan (for --test in CI)")
     args = parser.parse_args()
     try:
         source = Path(__file__).resolve().parent
         if args.output:
-            print(build(source, args.output, tests=args.test))
+            print(build(source, args.output, tests=args.test, sanitize=args.sanitize))
         else:
             with tempfile.TemporaryDirectory(prefix="omarchy-trcc-build-") as directory:
-                build(source, directory, tests=args.test)
+                build(source, directory, tests=args.test, sanitize=args.sanitize)
             print(tr("Compilación terminada; archivos temporales eliminados."))
         return 0
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:

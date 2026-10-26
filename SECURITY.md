@@ -10,4 +10,10 @@ Every change runs, in CI:
   plain text and the panel QML references no remote URL;
 - the native engine build and self-tests (theme validation, plain-text theme
   names, path boundaries, power sources);
-- CodeQL `security-extended` analysis for C++, Python and the workflows.
+- the same self-tests built with AddressSanitizer and UndefinedBehaviorSanitizer,
+  so memory errors, leaks or undefined behaviour fail the build;
+- CodeQL `security-extended` analysis for C++, Python and the workflows;
+- zizmor for the workflows, ShellCheck for the scripts and a `systemd-analyze
+  security` threshold for the root power relay;
+- OpenSSF Scorecard (weekly and on `main`) for the repository's security
+  practices.

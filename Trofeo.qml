@@ -20,6 +20,8 @@ Panel {
   readonly property bool ready: deviceData.ok === true
   readonly property bool busy: actionProc.running || queue.length > 0
   readonly property bool colourCapable: !!deviceData.playing
+  // Desktops without a PSU sensor or battery get the "Consumo" estimate tab.
+  readonly property bool estimateTab: !!(deviceData.metrics && deviceData.metrics.estimateAvailable)
   property string error: ""
   property var queue: []
   property string actionOutput: ""
@@ -95,7 +97,7 @@ Panel {
     function close(): void { root.close() }
     function toggle(): void { root.toggle() }
     function view(name: string): void {
-      if (name === "live" || name === "screen" || name === "themes" || name === "visuals") { root.page = name; root.open() }
+      if (name === "live" || name === "screen" || name === "themes" || name === "visuals" || name === "power") { root.page = name; root.open() }
     }
     function preview(id: string): void { root.expandedTheme = id; root.page = "themes"; root.open() }
     function status(): string {
@@ -128,7 +130,8 @@ Panel {
 
   Process {
     id: statusProc
-    command: ["python3", root.backend, "--device", root.device, "status"]
+    // With a theme open in Temas, the engine redraws its preview each refresh.
+    command: ["python3", root.backend, "--device", root.device, "status"].concat(root.page === "themes" && root.expandedTheme !== "" ? [root.expandedTheme] : [])
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.statusOutput = text }
     stderr: StdioCollector { waitForEnd: true; onStreamFinished: root.statusError = text }
     onExited: function(code) {
@@ -234,12 +237,15 @@ Panel {
             wrapMode: Text.Wrap
           }
           PanelSeparator { foreground: root.barForeground }
-          Row {
+          // Flow: the fifth tab (Consumo) wraps instead of overflowing.
+          Flow {
+            width: parent.width
             spacing: Style.space(6)
             Button { text: root.t("Inicio"); selected: root.page === "live"; onClicked: root.page = "live" }
             Button { text: root.t("Pantalla"); selected: root.page === "screen"; onClicked: root.page = "screen" }
             Button { text: root.t("Temas"); selected: root.page === "themes"; onClicked: root.page = "themes" }
             Button { text: root.t("Visuales"); selected: root.page === "visuals"; onClicked: root.page = "visuals" }
+            Button { text: root.t("Consumo"); visible: root.estimateTab; selected: root.page === "power"; onClicked: root.page = "power" }
           }
 
           Column {
@@ -251,9 +257,9 @@ Panel {
               spacing: Style.space(8)
               Repeater {
                 model: [
-                  {name: "CPU", temperature: "cpuTemp", load: "cpu"},
-                  {name: "GPU", temperature: "gpuTemp", load: "gpu"},
-                  {name: "RAM", temperature: "ramTemp", load: "ram"}
+                  {name: "CPU", temperature: "cpuTemp", load: "cpu", power: "cpuPower"},
+                  {name: "GPU", temperature: "gpuTemp", load: "gpu", power: "gpuPower"},
+                  {name: "RAM", temperature: "ramTemp", load: "ram", power: "ramPower", estimated: true}
                 ]
                 Rectangle {
                   id: metricCard
@@ -271,10 +277,24 @@ Panel {
                     anchors.fill: parent
                     anchors.margins: Style.space(10)
                     spacing: Style.space(5)
-                    Text {
-                      textFormat: Text.PlainText
-                      text: metricCard.modelData.name
-                      color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                    // Name, with the component's own power on the right when it has a sensor.
+                    Item {
+                      width: parent.width
+                      height: cardName.implicitHeight
+                      Text {
+                        id: cardName
+                        textFormat: Text.PlainText
+                        text: metricCard.modelData.name
+                        color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                      }
+                      Text {
+                        readonly property var watts: metricCard.modelData.power ? metricCard.readings[metricCard.modelData.power] : undefined
+                        anchors.right: parent.right
+                        textFormat: Text.PlainText
+                        visible: watts !== undefined && watts >= 0
+                        text: (metricCard.modelData.estimated ? "≈" : "") + Math.round(watts || 0) + " W"
+                        color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                      }
                     }
                     Text {
                       textFormat: Text.PlainText
@@ -295,6 +315,21 @@ Panel {
               width: parent.width
               text: root.deviceData.metrics ? "RAM · " + Number(root.deviceData.metrics.ramUsedGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " / "
                 + Number(root.deviceData.metrics.ramTotalGiB || 0).toLocaleString(Qt.locale(), "f", 1) + " GiB" : ""
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
+            Text {
+              textFormat: Text.PlainText
+              readonly property var readings: root.deviceData.metrics || ({})
+              function watts(value) { return value === undefined || value < 0 ? "—" : Math.round(value) + " W" }
+              width: parent.width
+              // The whole PC: from a PSU or battery when there is one, otherwise
+              // CPU + GPU, a lower bound ("≥") when one of them has no sensor.
+              // Each component's own watts show in its card above.
+              readonly property string source: readings.powerSource === "psu" ? "  (" + root.t("fuente") + ")"
+                : readings.powerSource === "battery" ? "  (" + root.t("batería") + ")"
+                : readings.powerSource === "estimate" ? "  (" + root.t("estimado") + ")" : ""
+              text: readings.power === undefined ? "" : root.t("Consumo") + " · "
+                + (readings.powerPartial ? "≥ " : readings.powerEstimated ? "≈ " : "") + watts(readings.power) + (readings.power >= 0 ? source : "")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             PanelSectionHeader { text: root.t("EN TU TROFEO"); foreground: root.barForeground }
@@ -364,6 +399,165 @@ Panel {
             }
           }
 
+          // Estimate for what has no sensor: detected parts plus what the user marks.
+          Column {
+            id: estimatePage
+            readonly property var choices: root.lcdState.estimate || ({})
+            readonly property var readings: root.deviceData.metrics || ({})
+            readonly property var detected: readings.detected || ({})
+            width: parent.width
+            spacing: Style.space(10)
+            visible: root.page === "power" && root.ready && root.estimateTab
+            function set(key, value) { root.run(["estimate", key, String(value)]) }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: root.t("Tu PC no tiene un sensor del consumo total. Marca lo que lleva y se sumará a CPU + GPU como estimación (≈).")
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
+            Button {
+              text: root.t("≈ Incluir en el total")
+              selected: estimatePage.choices.enabled === true
+              enabled: !root.busy
+              onClicked: estimatePage.set("enabled", estimatePage.choices.enabled ? "off" : "on")
+            }
+            PanelSectionHeader { text: root.t("DETECTADO"); foreground: root.barForeground }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              readonly property var d: estimatePage.detected
+              text: [d.dimms > 0 ? d.dimms + " × " + d.ddr : "", d.nvme > 0 ? d.nvme + " NVMe" : "",
+                     d.ssd > 0 ? d.ssd + " SSD SATA" : "", d.hdd > 0 ? d.hdd + " " + root.t("disco duro") : ""]
+                .filter(function (part) { return part !== "" }).join(" · ") || root.t("Nada detectado")
+              color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body
+            }
+            // Counts: tap − / +. RAM modules only when no sensor found them.
+            Repeater {
+              model: [
+                {key: "dimms", name: "Módulos de RAM", step: 1, max: 8, unit: "", manual: true},
+                {key: "fans", name: "Ventiladores sin RGB", step: 1, max: 20, unit: ""},
+                {key: "rgbFans", name: "Ventiladores con RGB", step: 1, max: 20, unit: ""},
+                {key: "rgbStrips", name: "Tiras RGB", step: 1, max: 20, unit: ""}
+              ]
+              Row {
+                required property var modelData
+                readonly property int value: estimatePage.choices[modelData.key] || 0
+                visible: !modelData.manual || !(estimatePage.detected.dimms > 0)
+                spacing: Style.space(6)
+                Text {
+                  textFormat: Text.PlainText
+                  width: Style.space(170)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: root.t(parent.modelData.name)
+                  color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body
+                }
+                Button { text: "−"; enabled: !root.busy && parent.value > 0; onClicked: estimatePage.set(parent.modelData.key, Math.max(0, parent.value - parent.modelData.step)) }
+                Text {
+                  textFormat: Text.PlainText
+                  width: Style.space(50)
+                  horizontalAlignment: Text.AlignHCenter
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: parent.value + parent.modelData.unit
+                  color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                }
+                Button { text: "+"; enabled: !root.busy && parent.value < parent.modelData.max; onClicked: estimatePage.set(parent.modelData.key, Math.min(parent.modelData.max, parent.value + parent.modelData.step)) }
+              }
+            }
+            // One choice per group.
+            Repeater {
+              model: [
+                {key: "board", title: "PLACA BASE", options: [{id: "itx", name: "Mini-ITX"}, {id: "matx", name: "Micro-ATX"}, {id: "atx", name: "ATX"}, {id: "eatx", name: "E-ATX"}]},
+                {key: "cooler", title: "REFRIGERACIÓN", options: [{id: "air", name: "Por aire"}, {id: "pump", name: "Líquida"}, {id: "pumpRgb", name: "Líquida con RGB"}]},
+                {key: "psu", title: "FUENTE (80 PLUS)", options: [{id: "none", name: "No sé"}, {id: "80plus", name: "80 Plus"}, {id: "bronze", name: "Bronze"}, {id: "silver", name: "Silver"},
+                                                               {id: "gold", name: "Gold"}, {id: "platinum", name: "Platinum"}, {id: "titanium", name: "Titanium"}]}
+              ]
+              Column {
+                required property var modelData
+                width: estimatePage.width
+                spacing: Style.space(6)
+                PanelSectionHeader { text: root.t(parent.modelData.title); foreground: root.barForeground }
+                Flow {
+                  id: choiceFlow
+                  readonly property var group: parent.modelData
+                  width: parent.width
+                  spacing: Style.space(6)
+                  Repeater {
+                    model: choiceFlow.group.options
+                    Button {
+                      required property var modelData
+                      text: root.t(modelData.name)
+                      selected: estimatePage.choices[choiceFlow.group.key] === modelData.id
+                      enabled: !root.busy
+                      onClicked: estimatePage.set(choiceFlow.group.key, modelData.id)
+                    }
+                  }
+                }
+              }
+            }
+            // Where the estimate comes from, part by part, then the sums.
+            PanelSectionHeader { text: root.t("RESTO DEL PC"); foreground: root.barForeground }
+            Repeater {
+              model: [{key: "board", name: "Placa base"}, {key: "ram", name: "RAM"}, {key: "drives", name: "Discos"},
+                      {key: "fans", name: "Ventiladores"}, {key: "cooling", name: "Refrigeración"}, {key: "rgb", name: "Tiras RGB"}]
+              Item {
+                required property var modelData
+                readonly property real watts: (estimatePage.readings.estimateParts || ({}))[modelData.key] || 0
+                visible: watts > 0
+                width: estimatePage.width
+                height: visible ? partName.implicitHeight : 0
+                Text {
+                  id: partName
+                  textFormat: Text.PlainText
+                  text: root.t(parent.modelData.name)
+                  color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                }
+                Text {
+                  anchors.right: parent.right
+                  textFormat: Text.PlainText
+                  text: "≈ " + Number(parent.watts).toLocaleString(Qt.locale(), "f", parent.watts % 1 ? 1 : 0) + " W"
+                  color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                }
+              }
+            }
+            Item {
+              readonly property var r: estimatePage.readings
+              width: parent.width
+              height: restTotal.implicitHeight
+              Text {
+                id: restTotal
+                textFormat: Text.PlainText
+                text: root.t("Resto del PC")
+                color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+              Text {
+                anchors.right: parent.right
+                textFormat: Text.PlainText
+                text: "≈ " + Math.round(parent.r.extraPower || 0) + " W"
+                color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+            }
+            Item {
+              readonly property var r: estimatePage.readings
+              visible: r.powerEstimated === true
+              width: parent.width
+              height: visible ? wallTotal.implicitHeight : 0
+              Text {
+                id: wallTotal
+                textFormat: Text.PlainText
+                text: root.t("Total en el enchufe")
+                color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+              Text {
+                anchors.right: parent.right
+                textFormat: Text.PlainText
+                text: "≈ " + Math.round(parent.r.power || 0) + " W"
+                color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+            }
+          }
+
           Column {
             width: parent.width
             spacing: Style.space(10)
@@ -423,7 +617,8 @@ Panel {
                 width: parent.width
                 height: width * 480 / 1280
                 source: root.themeInfo().preview ? root.themeInfo().preview + "?palette="
-                  + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "") : ""
+                  + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "")
+                  + "&frame=" + root.deviceData.previewRevision : ""
                 cache: false
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true

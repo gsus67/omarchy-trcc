@@ -702,8 +702,11 @@ public:
                 painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,405,W,75), band);
             } else if (layout == "omarchy")
                 logo.draw(painter, {40,92,1200,240}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
-            else if (layout == "picture")
-                picture.draw(painter, {40,88,1200,250}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            else if (layout == "picture") {
+                // Full screen behind the data, like Matrix, so the picture is large.
+                picture.draw(painter, {0,0,W,H}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+                painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,335,W,145), band);
+            }
             else if (layout == "fx") {
                 // Fixed-width rows so columns line up while the effect assembles them.
                 QStringList rows;

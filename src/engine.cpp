@@ -37,7 +37,11 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include "scenes.hpp"
 #include "themes.hpp"
 
@@ -200,6 +204,49 @@ public:
             }
         }
         return true;
+    }
+};
+
+// Encodes and sends frames on its own thread: JPEG + USB take 10–20 ms, and
+// doing it on the frame clock made animation timing uneven. Only the newest
+// frame waits; one that arrives while another is in flight replaces it. All
+// access to the Usb object goes through `lock` (open/close/status run on the
+// main thread).
+class FrameSender {
+public:
+    explicit FrameSender(Usb &device) : usb(device), worker([this] { loop(); }) {}
+    ~FrameSender() {
+        { std::lock_guard<std::mutex> guard(queue); quit = true; }
+        wake.notify_all(); worker.join();
+    }
+    void submit(const QImage &image, int orientation) {
+        { std::lock_guard<std::mutex> guard(queue); pending = image; pendingOrientation = orientation; waiting = true; }
+        wake.notify_one();
+    }
+    std::mutex lock;
+    std::atomic<quint64> sent{0};
+    std::atomic<double> sendMs{0};
+private:
+    Usb &usb;
+    std::mutex queue; std::condition_variable wake;
+    QImage pending; int pendingOrientation = 0; bool waiting = false, quit = false;
+    std::thread worker;
+    void loop() {
+        for (;;) {
+            QImage image; int orientation;
+            {
+                std::unique_lock<std::mutex> guard(queue);
+                wake.wait(guard, [this] { return waiting || quit; });
+                if (quit) return;
+                image = pending; orientation = pendingOrientation; waiting = false; pending = QImage();
+            }
+            QElapsedTimer cost; cost.start();
+            std::lock_guard<std::mutex> device(lock);
+            if (usb.connected() && usb.send(image, orientation)) {
+                ++sent;
+                sendMs = sendMs * .9 + cost.nsecsElapsed() / 1e6 * .1;
+            }
+        }
     }
 };
 
@@ -474,6 +521,7 @@ struct Palette {
 class Engine {
 public:
     Usb usb;
+    FrameSender sender{usb};
     Metrics metrics;
     Palette palette;
     ThemeStore customThemes;
@@ -538,6 +586,8 @@ public:
         if (file.open(QIODevice::WriteOnly)) { file.write(QJsonDocument(settings).toJson()); file.commit(); }
     }
     QString visual() const { return settings["visual"].toString(); }
+    bool usbConnected() { std::lock_guard<std::mutex> device(sender.lock); return usb.connected(); }
+    QString usbError() { std::lock_guard<std::mutex> device(sender.lock); return usb.error; }
     void startAudio() {
         if (visual().isEmpty() || audio.state() != QProcess::NotRunning || offline) return;
         QProcess sink;
@@ -829,7 +879,7 @@ public:
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
             {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]}};
-        return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
+        return {{"ok",true},{"key","0416:5302"},{"usbPresent",usbConnected()}, {"deviceError",usbError()},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},{"fpsNow",qRound(fpsNow)},{"drawMs",qRound(drawMs*10)/10.0},{"sendMs",qRound(sendMs*10)/10.0},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
@@ -890,7 +940,7 @@ public:
             settings["layout"]="picture"; settings["visual"]=""; previews();
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
-        } else if(op=="reconnect") { usb.close(); lastConnect=0; }
+        } else if(op=="reconnect") { std::lock_guard<std::mutex> device(sender.lock); usb.close(); lastConnect=0; }
         else return invalid();
         if(visual().isEmpty()) { audio.kill(); samples.clear(); }
         else startAudio();
@@ -1009,7 +1059,7 @@ public:
             palette.load(); metrics.sample(); lastSample=now;
             if(oldPalette!=palette.name+palette.accent.name()+palette.background.name()+palette.foreground.name()) previews();
         }
-        if(!offline&&!usb.connected()&&now-lastConnect>=5000) { lastConnect=now; usb.open(); }
+        if(!offline&&!usbConnected()&&now-lastConnect>=5000) { lastConnect=now; std::lock_guard<std::mutex> device(sender.lock); usb.open(); }
         if(!visual().isEmpty()&&now-lastAudioRetry>=5000) { lastAudioRetry=now; startAudio(); }
         bool game=settings["game"].toBool()&&metrics.cpu>75;
         QString active=game?QString():visual(), layout=settings["layout"].toString();
@@ -1044,8 +1094,9 @@ public:
         QElapsedTimer cost; cost.start();
         QImage image=render(settings["layout"].toString(),active);
         drawMs=drawMs*.9+cost.nsecsElapsed()/1e6*.1; cost.restart();
-        if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) { ++framesSent; sendMs=sendMs*.9+cost.nsecsElapsed()/1e6*.1; }
+        if(!offline) sender.submit(image,settings["orientation"].toInt());
         lastFrame=now;
+        framesSent=sender.sent; sendMs=sender.sendMs;
         if(now-fpsSince>=1000) { fpsNow=(framesSent-fpsFrames)*1000.0/std::max<qint64>(1,now-fpsSince); fpsFrames=framesSent; fpsSince=now; }
     }
     bool listen() {
@@ -1105,6 +1156,8 @@ int main(int argc,char **argv) {
         ok=ok&&engine.palette.accent.name()=="#abcdef"&&engine.palette.background.name()=="#111111";
         ok=ok&&engine.command({{"command","status"},{"args",QJsonArray{"rings"}}})["ok"].toBool()&&QFileInfo::exists(engine.stateDir+"/previews/rings.png");
         ok=ok&&!engine.command({{"command","status"},{"args",QJsonArray{"../rings"}}})["ok"].toBool();
+        // The sender thread takes frames while the main thread asks about USB.
+        for(int i=0;i<50;++i) { engine.sender.submit(QImage(W,H,QImage::Format_RGB32),0); ok=ok&&!engine.usbConnected(); }
         // Animations move only when stepped; frame rates are a fixed menu.
         for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();

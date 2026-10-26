@@ -55,7 +55,8 @@ laptop battery while discharging, or CPU + GPU. GPU power comes from
 NVML; all GPUs are added. A sleeping NVIDIA laptop GPU counts as 0 W and is not
 woken up. CPU power comes from the RAPL counter only when the system already
 lets users read it; Omarchy keeps it root-only for security, so the CPU usually
-shows `—` and the total shows as `≥ X W`. CPU + GPU leaves out the board, RAM,
+shows `—` and the total shows as `≥ X W`. The panel shows it on Home and the Trofeo in the
+layouts' header, next to the date. CPU + GPU leaves out the board, RAM,
 drives and PSU losses.
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`

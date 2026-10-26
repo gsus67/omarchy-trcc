@@ -41,6 +41,18 @@
 static constexpr int W = 1280, H = 480;
 static const QStringList layouts = {"focus", "terminal", "rings", "dots"};
 static const QStringList visualIds = {"bars", "wave", "rings", "particles"};
+// Data the built-in layouts can show, chosen in the panel (up to 4 slots).
+static const QStringList fieldIds = {"cpu", "gpu", "ram", "ramTemp", "time", "power", "cpuPower", "gpuPower"};
+static const QJsonArray defaultFields = {"cpu", "gpu", "ram", "time"};
+// Valid, unique, known ids, at most 4; empty when the list is not usable.
+static QJsonArray cleanFields(const QJsonValue &value) {
+    QJsonArray fields;
+    for (const auto &item : value.toArray()) {
+        QString id = item.toString();
+        if (fieldIds.contains(id) && !fields.contains(id) && fields.size() < 4) fields.append(id);
+    }
+    return fields;
+}
 static QString readText(const QString &path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) return {};
@@ -132,7 +144,7 @@ public:
         }
         libusb_free_device_list(devices, 1);
         if (rc != 0 || !handle) {
-            error = rc == LIBUSB_ERROR_ACCESS ? uiText("Sin permiso USB: ejecuta setup-usb.sh") : QString::fromLatin1(libusb_error_name(rc));
+            error = rc == LIBUSB_ERROR_ACCESS ? uiText("Sin permiso USB: ejecuta setup.sh") : QString::fromLatin1(libusb_error_name(rc));
             close(); return false;
         }
         QByteArray init(512, '\0'); init.replace(0, 4, QByteArray::fromHex("dadbdcdd")); init[12] = 1;
@@ -210,7 +222,7 @@ struct Metrics {
     // Watts; -1 = no sensor. powerSource: "psu", "battery", "components" or "".
     double cpuPower = -1, gpuPower = -1, power = -1;
     QString powerSource; bool powerPartial = false;
-    QString sysRoot = "/sys", procRoot = "/proc", nvmlLibrary = "libnvidia-ml.so.1";
+    QString sysRoot = "/sys", procRoot = "/proc", runRoot = "/run", nvmlLibrary = "libnvidia-ml.so.1";
     quint64 previousTotal = 0, previousIdle = 0;
     // Energy counters (µJ) by path, to turn them into watts between samples.
     QHash<QString, QPair<qint64, qint64>> energy;
@@ -328,10 +340,17 @@ struct Metrics {
                 QString value = readText(sysRoot + "/class/drm/" + card + "/device/gpu_busy_percent");
                 if (!value.isEmpty()) { gpu = value.toDouble(); break; }
             }
-        // Package power from the RAPL counter. The kernel keeps energy_uj
-        // root-only, so this only works where the system already allows it.
+        // CPU package power. setup.sh can install omarchy-trcc-power.service,
+        // which publishes whole watts from the root-only RAPL counter; a value
+        // older than 5 s means the service stopped. Otherwise read the counter
+        // directly, which only works where the system already allows it.
+        QString relay = runRoot + "/omarchy-trcc-power/cpu-watts";
+        QFileInfo relayInfo(relay);
+        QString relayed = relayInfo.exists() && relayInfo.lastModified().msecsTo(QDateTime::currentDateTime()) < 5000 ? readText(relay) : QString();
+        bool relayOk = false; int relayWatts = relayed.toInt(&relayOk);
         QString rapl = sysRoot + "/class/powercap/intel-rapl:0";
-        cpuPower = energyPower(rapl + "/energy_uj", nowMs, readText(rapl + "/max_energy_range_uj").toLongLong());
+        double direct = energyPower(rapl + "/energy_uj", nowMs, readText(rapl + "/max_energy_range_uj").toLongLong());
+        cpuPower = relayOk && relayWatts >= 0 ? relayWatts : direct;
         // A laptop battery only measures the whole system while discharging.
         double batteryPower = -1;
         QString supplyDir = sysRoot + "/class/power_supply";
@@ -399,12 +418,14 @@ public:
         customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
-                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}};
+                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"fields", defaultFields}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
         if (!layouts.contains(settings["layout"].toString())&&!customThemes.contains(settings["layout"].toString())) settings["layout"] = "focus";
         if (!visualIds.contains(settings["visual"].toString())) settings["visual"] = "";
+        if (cleanFields(settings["fields"]).isEmpty()) settings["fields"] = defaultFields;
+        else settings["fields"] = cleanFields(settings["fields"]);
         settings["brightness"] = std::clamp(settings["brightness"].toInt(100), 0, 100);
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
         palette.load(); metrics.sample();
@@ -457,6 +478,31 @@ public:
         QFont font(palette.font); font.setPixelSize(size); font.setBold(bold);
         p.setFont(font); p.setPen(color); p.drawText(rect, alignment, value);
     }
+    // What each chosen slot shows. ring = load for the rings layout (-1: none);
+    // wide = a longer value that needs a smaller font.
+    struct Field { QString label, value, detail; double ring; bool wide; };
+    QStringList chosenFields() const {
+        QStringList fields;
+        for (const auto &item : settings["fields"].toArray()) fields << item.toString();
+        if (fields.isEmpty()) for (const auto &item : defaultFields) fields << item.toString();
+        return fields;
+    }
+    QList<Field> fieldData() const {
+        auto watts = [](double value) { return value < 0 ? QString::fromUtf8("—") : QString::number(qRound(value)) + " W"; };
+        QList<Field> out;
+        for (const QString &id : chosenFields()) {
+            if (id == "cpu") out << Field{"CPU", temperature(metrics.cpuTemp), uiText("%1% CARGA").arg(qRound(metrics.cpu)), metrics.cpu, false};
+            else if (id == "gpu") out << Field{"GPU", temperature(metrics.gpuTemp), metrics.gpu<0 ? uiText("SIN SENSOR DE CARGA") : uiText("%1% CARGA").arg(qRound(metrics.gpu)), std::max(0.,metrics.gpu), false};
+            else if (id == "ram") out << Field{"RAM", QString::number(qRound(metrics.ram))+"%", uiText("MEMORIA EN USO"), metrics.ram, false};
+            else if (id == "ramTemp") out << Field{"RAM", temperature(metrics.ramTemp), uiText("TEMPERATURA RAM"), -1, false};
+            else if (id == "time") out << Field{uiText("HORA"), QTime::currentTime().toString("HH:mm"), uiText("HORA LOCAL"), -1, true};
+            else if (id == "power") out << Field{uiText("CONSUMO"), metrics.power<0 ? QString::fromUtf8("—") : metrics.powerText()+" W",
+                metrics.powerSource=="psu" ? uiText("FUENTE") : metrics.powerSource=="battery" ? uiText("BATERÍA") : metrics.powerPartial ? uiText("CPU + GPU (PARCIAL)") : uiText("CPU + GPU"), -1, true};
+            else if (id == "cpuPower") out << Field{"CPU", watts(metrics.cpuPower), uiText("CONSUMO CPU"), -1, true};
+            else if (id == "gpuPower") out << Field{"GPU", watts(metrics.gpuPower), uiText("CONSUMO GPU"), -1, true};
+        }
+        return out;
+    }
     QImage render(const QString &layout, const QString &audioVisual, bool preview = false) {
         int orientation = preview ? 0 : settings["orientation"].toInt();
         bool portrait = orientation == 90 || orientation == 270;
@@ -502,11 +548,11 @@ public:
         } else if (portrait) {
             text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
             text(painter, {30,85,420,40}, palette.name, 20, palette.muted);
-            const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
-            const QStringList labels = {"CPU", "GPU", "RAM", uiText("HORA")};
-            for (int i = 0; i < 4; ++i) {
-                text(painter, {30,160.+i*265,420,45}, labels[i], 27, palette.accent);
-                text(painter, {30,205.+i*265,420,140}, values[i], 92, palette.foreground, true);
+            const QList<Field> data = fieldData();
+            for (int i = 0; i < data.size(); ++i) {
+                double y = 160 + i * 1060.0 / data.size();
+                text(painter, {30,y,420,45}, data[i].label, 27, palette.accent);
+                text(painter, {30,y+45,420,140}, data[i].value, data[i].wide ? 76 : 92, palette.foreground, true);
             }
         } else if (!audioVisual.isEmpty()) {
             QColor accent = settings["followAccent"].toBool() ? palette.accent : QColor::fromHsv(settings["visualHue"].toInt(), 170, 240);
@@ -549,34 +595,36 @@ public:
             }
         } else {
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
+            const QList<Field> data = fieldData();
+            const QStringList fields = chosenFields();
+            // The PC total goes in the header unless it already has a slot.
             QString date = QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy");
-            text(painter, {760,20,480,50}, metrics.power < 0 ? date : metrics.powerText() + " W  ·  " + date, 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
-            const QStringList labels = {"CPU", "GPU", "RAM", uiText("HORA")};
-            const QStringList values = {temperature(metrics.cpuTemp), temperature(metrics.gpuTemp), QString::number(qRound(metrics.ram))+"%", QTime::currentTime().toString("HH:mm")};
-            const QStringList details = {uiText("%1% CARGA").arg(qRound(metrics.cpu)), metrics.gpu<0 ? uiText("SIN SENSOR DE CARGA") : uiText("%1% CARGA").arg(qRound(metrics.gpu)), uiText("MEMORIA EN USO"), uiText("HORA LOCAL")};
+            bool headerPower = metrics.power >= 0 && !fields.contains("power");
+            text(painter, {760,20,480,50}, headerPower ? metrics.powerText() + " W  ·  " + date : date, 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            int count = data.size();
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);
-                for (int i=0;i<4;++i) {
-                    text(painter,{55,150.+i*65,200,55},labels[i].toLower(),26,palette.accent);
-                    text(painter,{300,150.+i*65,350,55},values[i],36,palette.foreground,true);
-                    text(painter,{690,150.+i*65,530,55},details[i],23,palette.muted);
+                for (int i=0;i<count;++i) {
+                    text(painter,{55,150.+i*65,200,55},data[i].label.toLower(),26,palette.accent);
+                    text(painter,{300,150.+i*65,350,55},data[i].value,36,palette.foreground,true);
+                    text(painter,{690,150.+i*65,530,55},data[i].detail,23,palette.muted);
                 }
-            } else for (int i=0;i<4;++i) {
-                double x = 40+i*310;
-                if (layout == "rings" && i<3) {
-                    double load = (i==0?metrics.cpu:(i==1?std::max(0.,metrics.gpu):metrics.ram));
+            } else for (int i=0;i<count;++i) {
+                // Columns share the width: four fit as before, fewer spread out.
+                double column = 1240.0 / count, x = 40+i*column;
+                if (layout == "rings" && data[i].ring >= 0) {
                     painter.setPen(QPen(palette.muted,9)); painter.setBrush(Qt::NoBrush); painter.drawEllipse(QPointF(x+135,240),105,105);
-                    painter.setPen(QPen(palette.accent,9)); painter.drawArc(QRectF(x+30,135,210,210),90*16,-int(load*3.6*16));
-                    text(painter,{x,190,270,100},values[i],55,palette.foreground,true,Qt::AlignCenter);
+                    painter.setPen(QPen(palette.accent,9)); painter.drawArc(QRectF(x+30,135,210,210),90*16,-int(data[i].ring*3.6*16));
+                    text(painter,{x,190,270,100},data[i].value,55,palette.foreground,true,Qt::AlignCenter);
                 } else if (layout == "dots") {
                     QImage mask(280,120,QImage::Format_ARGB32); mask.fill(Qt::transparent);
-                    QPainter mp(&mask); QFont font(palette.font); font.setPixelSize(i==3?67:83); font.setBold(true); mp.setFont(font); mp.setPen(Qt::white); mp.drawText(mask.rect(),Qt::AlignCenter,values[i]); mp.end();
+                    QPainter mp(&mask); QFont font(palette.font); font.setPixelSize(data[i].wide?67:83); font.setBold(true); mp.setFont(font); mp.setPen(Qt::white); mp.drawText(mask.rect(),Qt::AlignCenter,data[i].value); mp.end();
                     painter.setPen(Qt::NoPen); painter.setBrush(palette.foreground);
                     for (int yy=0;yy<120;yy+=5) for(int xx=0;xx<280;xx+=5)
                         if(qAlpha(mask.pixel(xx,yy))>80) painter.drawEllipse(QPointF(x+xx,185+yy),1.9,1.9);
-                } else text(painter,{x,170,280,140},values[i],i==3?73:88,palette.foreground,true);
-                text(painter,{x,90,280,50},labels[i],24,palette.accent,true);
-                text(painter,{x,350,290,50},details[i],18,palette.muted);
+                } else text(painter,{x,170,280,140},data[i].value,data[i].wide?73:88,palette.foreground,true);
+                text(painter,{x,90,280,50},data[i].label,24,palette.accent,true);
+                text(painter,{x,350,290,50},data[i].detail,18,palette.muted);
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
             QString version = pluginVersion();
@@ -603,7 +651,7 @@ public:
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
-            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]}};
+            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"fields",settings["fields"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
@@ -640,6 +688,10 @@ public:
         } else if(op=="overlay"||op=="game"||op=="follow-accent") {
             if(value!="on"&&value!="off") return invalid();
             settings[op=="follow-accent"?"followAccent":op]=value=="on";
+        } else if(op=="fields") {
+            QJsonArray fields=cleanFields(args);
+            if(fields.isEmpty()||fields.size()!=args.size()) return invalid();
+            settings["fields"]=fields; save(); previews();
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
         } else if(op=="reconnect") { usb.close(); lastConnect=0; }
@@ -738,6 +790,19 @@ int main(int argc,char **argv) {
         ok=paletteFile.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok; paletteFile.write("accent = \"#abcdef\"\nbackground = \"#111111\"\n"); paletteFile.close();
         engine.palette.load();
         ok=ok&&engine.palette.accent.name()=="#abcdef"&&engine.palette.background.name()=="#111111";
+        // Chosen layout slots: validated, saved, drawn in every layout and orientation.
+        ok=ok&&engine.command({{"command","fields"},{"args",QJsonArray{"power","cpuPower","gpuPower"}}})["ok"].toBool();
+        ok=ok&&engine.settings["fields"].toArray()==QJsonArray({"power","cpuPower","gpuPower"});
+        ok=ok&&engine.fieldData().size()==3&&engine.fieldData()[0].wide;
+        ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{"cpu","cpu"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{"cpu","gpu","ram","time","power"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{"cpu","../x"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{}}})["ok"].toBool();
+        ok=ok&&engine.settings["fields"].toArray().size()==3;
+        for(const QString &layout:layouts) {
+            QImage image=engine.render(layout,""); ok=ok&&!image.isNull()&&image.size()==QSize(W,H);
+        }
+        ok=ok&&cleanFields(QJsonArray{"x","cpu",1,"cpu","gpu","ram","time","power"})==QJsonArray({"cpu","gpu","ram","time"});
         for(int angle: {90,180,270,0}) {
             engine.settings["orientation"]=angle;
             QImage image=engine.render("focus","");
@@ -771,6 +836,14 @@ int main(int argc,char **argv) {
         put("class/powercap/intel-rapl:0/energy_uj","1000000"); m.sample(3000);
         ok=ok&&qFuzzyCompare(m.cpuPower,2.0)&&!m.powerPartial&&m.powerSource=="components"&&m.powerText()=="52";
         drop("class/powercap/intel-rapl:0/energy_uj");
+        // The power service's whole watts win; a stale file (service stopped) is ignored.
+        m.runRoot=fakeSys.path()+"/run";
+        put("run/omarchy-trcc-power/cpu-watts","7\n"); m.sample(3500); ok=ok&&m.cpuPower==7&&!m.powerPartial;
+        QFile stale(fakeSys.path()+"/run/omarchy-trcc-power/cpu-watts");
+        ok=stale.open(QIODevice::ReadWrite)&&stale.setFileTime(QDateTime::currentDateTime().addSecs(-60),QFileDevice::FileModificationTime)&&ok; stale.close();
+        m.sample(3600); ok=ok&&m.cpuPower<0;
+        put("run/omarchy-trcc-power/cpu-watts","garbage"); m.sample(3700); ok=ok&&m.cpuPower<0;
+        drop("run/omarchy-trcc-power/cpu-watts");
         // Intel discrete GPUs: energy counter turned into watts (3 J in 1 s).
         put("class/hwmon/hwmon3/name","xe"); put("class/hwmon/hwmon3/energy1_input","1000000"); m.sample(4000);
         put("class/hwmon/hwmon3/energy1_input","4000000"); m.sample(5000); ok=ok&&qFuzzyCompare(m.gpuPower,53.0);

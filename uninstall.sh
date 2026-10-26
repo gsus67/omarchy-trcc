@@ -25,5 +25,11 @@ if $purge; then
     sudo rm -f /etc/udev/rules.d/70-omarchy-trcc.rules
     sudo udevadm control --reload-rules
   fi
+  if [[ -f /etc/systemd/system/omarchy-trcc-power.service || -f /usr/local/libexec/omarchy-trcc-power ]]; then
+    sudo systemctl disable --now omarchy-trcc-power.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/omarchy-trcc-power.service /usr/local/libexec/omarchy-trcc-power
+    sudo rmdir /usr/local/libexec 2>/dev/null || true
+    sudo systemctl daemon-reload
+  fi
 fi
 echo 'Omarchy TRCC desinstalado.'

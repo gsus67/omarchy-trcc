@@ -26,7 +26,9 @@ v0.0.8 está probada con **USB `0416:5302`, PM 128, SUB 1, 1280×480**. El motor
 
 Las temperaturas se leen desde hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`, `i915`, `xe`), la carga de CPU/RAM desde `/proc` y la carga de GPU desde el nodo DRM `gpu_busy_percent`. La temperatura de RAM se obtiene de sensores `spd5118`/`jc42` y muestra el máximo disponible. Con el driver propietario de NVIDIA, consumo, temperatura y carga de la GPU salen de NVML, la librería que Omarchy instala con `nvidia-utils` (la misma que usa `nvidia-smi`).
 
-El consumo en vatios se lee sin root y sin cambiar permisos. Para el total de la PC se usa, por orden: una fuente Corsair HXi/RMi con USB (hwmon `corsairpsu`), la batería de un portátil mientras se descarga, o la suma CPU + GPU. La GPU sale de `amdgpu`/`nouveau`, del contador de energía de las GPU Intel dedicadas (`i915`/`xe`) o de NVML; se suman todas. Una GPU NVIDIA de portátil dormida cuenta como 0 W y no se despierta. La CPU sale del contador RAPL solo si el sistema ya lo deja leer; Omarchy lo reserva a root por seguridad, así que normalmente la CPU muestra `—` y el total aparece como `≥ X W`. El panel lo muestra en Inicio y la Trofeo en la cabecera de los diseños, junto a la fecha. La suma CPU + GPU no incluye placa, RAM, discos ni pérdidas de la fuente.
+El consumo en vatios se lee sin root y sin cambiar permisos. Para el total de la PC se usa, por orden: una fuente Corsair HXi/RMi con USB (hwmon `corsairpsu`), la batería de un portátil mientras se descarga, o la suma CPU + GPU. La GPU sale de `amdgpu`/`nouveau`, del contador de energía de las GPU Intel dedicadas (`i915`/`xe`) o de NVML; se suman todas. Una GPU NVIDIA de portátil dormida cuenta como 0 W y no se despierta. Omarchy reserva a root el contador RAPL de la CPU por seguridad; el paso opcional `setup.sh` (más abajo) instala un servicio del sistema encerrado que publica solo vatios enteros una vez por segundo, así el plugin obtiene el consumo de la CPU sin acceso al contador. Sin él, la CPU muestra `—` y el total aparece como `≥ X W`. El panel muestra el total en Inicio y los vatios de cada componente en su cuadro; la Trofeo muestra el total en la cabecera de los diseños, junto a la fecha. La suma CPU + GPU no incluye placa, RAM, discos ni pérdidas de la fuente.
+
+En **Pantalla → En los diseños** eliges hasta 4 datos para los diseños Focus, Terminal, Rings y Dots: temperatura de CPU, GPU y RAM, uso de RAM, hora, consumo total, consumo de CPU y consumo de GPU.
 
 Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 
@@ -48,13 +50,16 @@ Para actualizar:
 omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
-Si falta permiso USB, ejecuta desde una terminal:
+Para el permiso USB y el consumo de la CPU, ejecuta una vez desde una terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup.sh
 ```
 
-Ese paso opcional solicita sudo para instalar una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
+Ese paso opcional pide sudo una sola vez e instala únicamente copias propiedad de root:
+
+- una regla `uaccess` limitada a `0416:5302`. No concede acceso global de escritura al USB. Cierra cualquier controlador que ya esté usando la pantalla antes de iniciar el motor.
+- si la CPU tiene RAPL, `omarchy-trcc-power.service` y su script `/usr/local/libexec/omarchy-trcc-power`. Lee el contador de energía una vez por segundo y escribe solo vatios enteros en `/run/omarchy-trcc-power/cpu-watts`, lo que inutiliza los ataques que necesitan lecturas finas (Platypus, CVE-2020-8694); el contador sigue siendo solo de root. Corre sin capacidades, sin red, sin carpeta personal ni dispositivos, con el sistema en solo lectura (exposición de systemd 0,7/10), y nunca ejecuta archivos de la carpeta del plugin.
 
 ## Uso
 
@@ -96,7 +101,7 @@ La instalación usa únicamente:
 - Una entrada `io.github.gsus67.omarchy-trcc` en la barra de `shell.json`
 - `~/.local/state/omarchy-trcc/` para ajustes, temas importados, vistas previas y una única imagen en vivo que se sobrescribe
 - Socket/bloqueo temporales en `$XDG_RUNTIME_DIR`
-- Opcionalmente, `/etc/udev/rules.d/70-omarchy-trcc.rules` si ejecutaste `setup-usb.sh`
+- Opcionalmente, si ejecutaste `setup.sh`: `/etc/udev/rules.d/70-omarchy-trcc.rules`, `/etc/systemd/system/omarchy-trcc-power.service` y `/usr/local/libexec/omarchy-trcc-power` (`uninstall.sh --purge` los quita)
 
 Respeta `XDG_CONFIG_HOME` y `XDG_STATE_HOME`. El binario compilado queda en `~/.local/state/omarchy-trcc/bin/`; la compilación temporal se borra. La eliminación normal del plugin también retira el motor y su unidad de usuario, conservando tus ajustes y temas personalizados.
 

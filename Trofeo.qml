@@ -251,8 +251,8 @@ Panel {
               spacing: Style.space(8)
               Repeater {
                 model: [
-                  {name: "CPU", temperature: "cpuTemp", load: "cpu"},
-                  {name: "GPU", temperature: "gpuTemp", load: "gpu"},
+                  {name: "CPU", temperature: "cpuTemp", load: "cpu", power: "cpuPower"},
+                  {name: "GPU", temperature: "gpuTemp", load: "gpu", power: "gpuPower"},
                   {name: "RAM", temperature: "ramTemp", load: "ram"}
                 ]
                 Rectangle {
@@ -271,10 +271,24 @@ Panel {
                     anchors.fill: parent
                     anchors.margins: Style.space(10)
                     spacing: Style.space(5)
-                    Text {
-                      textFormat: Text.PlainText
-                      text: metricCard.modelData.name
-                      color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                    // Name, with the component's own power on the right when it has a sensor.
+                    Item {
+                      width: parent.width
+                      height: cardName.implicitHeight
+                      Text {
+                        id: cardName
+                        textFormat: Text.PlainText
+                        text: metricCard.modelData.name
+                        color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+                      }
+                      Text {
+                        readonly property var watts: metricCard.modelData.power ? metricCard.readings[metricCard.modelData.power] : undefined
+                        anchors.right: parent.right
+                        textFormat: Text.PlainText
+                        visible: watts !== undefined && watts >= 0
+                        text: Math.round(watts || 0) + " W"
+                        color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                      }
                     }
                     Text {
                       textFormat: Text.PlainText
@@ -302,14 +316,13 @@ Panel {
               readonly property var readings: root.deviceData.metrics || ({})
               function watts(value) { return value === undefined || value < 0 ? "—" : Math.round(value) + " W" }
               width: parent.width
-              // A PSU or battery measures the whole PC; otherwise it is CPU + GPU,
-              // a lower bound ("≥") when one of them has no sensor.
-              readonly property string detail: readings.powerSource === "psu" ? root.t("fuente")
-                : readings.powerSource === "battery" ? root.t("batería")
-                : "CPU " + watts(readings.cpuPower) + " · GPU " + watts(readings.gpuPower)
+              // The whole PC: from a PSU or battery when there is one, otherwise
+              // CPU + GPU, a lower bound ("≥") when one of them has no sensor.
+              // Each component's own watts show in its card above.
+              readonly property string source: readings.powerSource === "psu" ? "  (" + root.t("fuente") + ")"
+                : readings.powerSource === "battery" ? "  (" + root.t("batería") + ")" : ""
               text: readings.power === undefined ? "" : root.t("Consumo") + " · "
-                + (readings.powerPartial ? "≥ " : "") + watts(readings.power)
-                + (readings.power >= 0 ? "  (" + detail + ")" : "")
+                + (readings.powerPartial ? "≥ " : "") + watts(readings.power) + (readings.power >= 0 ? source : "")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             PanelSectionHeader { text: root.t("EN TU TROFEO"); foreground: root.barForeground }
@@ -376,6 +389,42 @@ Panel {
               }
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
+            }
+            // What the built-in layouts show: tap to add or remove, up to 4 slots.
+            PanelSectionHeader { text: root.t("EN LOS DISEÑOS"); foreground: root.barForeground }
+            Flow {
+              id: fieldPicker
+              readonly property var chosen: root.lcdState.fields || ["cpu", "gpu", "ram", "time"]
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: [
+                  {id: "cpu", name: "Temp. CPU"}, {id: "gpu", name: "Temp. GPU"},
+                  {id: "ram", name: "Uso RAM"}, {id: "ramTemp", name: "Temp. RAM"},
+                  {id: "time", name: "Hora"}, {id: "power", name: "Consumo total"},
+                  {id: "cpuPower", name: "Consumo CPU"}, {id: "gpuPower", name: "Consumo GPU"}
+                ]
+                Button {
+                  required property var modelData
+                  readonly property bool chosen: fieldPicker.chosen.indexOf(modelData.id) >= 0
+                  text: root.t(modelData.name)
+                  selected: chosen
+                  // At least one slot stays; a fifth is not offered.
+                  enabled: !root.busy && (chosen ? fieldPicker.chosen.length > 1 : fieldPicker.chosen.length < 4)
+                  onClicked: {
+                    var next = fieldPicker.chosen.filter(function (id) { return id !== modelData.id })
+                    if (!chosen) next.push(modelData.id)
+                    root.run(["fields"].concat(next))
+                  }
+                }
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              wrapMode: Text.WordWrap
+              text: root.t("Elige hasta 4 datos para los diseños Focus, Terminal, Rings y Dots.")
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }
 

@@ -53,11 +53,17 @@ PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon `corsairpsu`), a
 laptop battery while discharging, or CPU + GPU. GPU power comes from
 `amdgpu`/`nouveau`, the energy counter of Intel discrete GPUs (`i915`/`xe`) or
 NVML; all GPUs are added. A sleeping NVIDIA laptop GPU counts as 0 W and is not
-woken up. CPU power comes from the RAPL counter only when the system already
-lets users read it; Omarchy keeps it root-only for security, so the CPU usually
-shows `—` and the total shows as `≥ X W`. The panel shows it on Home and the Trofeo in the
-layouts' header, next to the date. CPU + GPU leaves out the board, RAM,
-drives and PSU losses.
+woken up. Omarchy keeps the CPU's RAPL energy counter root-only for security;
+the optional `setup.sh` step (below) installs a sandboxed system service that
+publishes only whole watts once per second, so the plugin gets the CPU power
+without access to the counter. Without it the CPU shows `—` and the total shows
+as `≥ X W`. The panel shows the total on Home and each component's watts in its
+card; the Trofeo shows the total in the layouts' header, next to the date. CPU +
+GPU leaves out the board, RAM, drives and PSU losses.
+
+In **Display → In the layouts** you pick up to 4 readings for the Focus,
+Terminal, Rings and Dots layouts: CPU, GPU and RAM temperature, RAM use, time,
+total power, CPU power and GPU power.
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`
 themes, KarmaViz shaders or presets.
@@ -92,15 +98,24 @@ To update:
 omarchy plugin update io.github.gsus67.omarchy-trcc
 ```
 
-If USB permission is missing, run from a terminal:
+For USB permission and the CPU power reading, run once from a terminal:
 
 ```sh
-bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup-usb.sh
+bash ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/setup.sh
 ```
 
-That optional step asks for sudo to install a `uaccess` rule limited to
-`0416:5302`. It does not grant global USB write access. Close any other driver
-already using the screen before starting the engine.
+That optional step asks for sudo once and installs only root-owned copies:
+
+- a `uaccess` rule limited to `0416:5302`. It does not grant global USB write
+  access. Close any other driver already using the screen before starting the
+  engine.
+- if the CPU has RAPL, `omarchy-trcc-power.service` and its script
+  `/usr/local/libexec/omarchy-trcc-power`. It reads the energy counter once
+  per second and writes only whole watts to `/run/omarchy-trcc-power/cpu-watts`,
+  which defeats attacks that need fine-grained readings (Platypus,
+  CVE-2020-8694); the counter itself stays root-only. It runs without any
+  capabilities, network, home or devices, on a read-only system (systemd
+  exposure 0.7/10), and never runs files from the plugin folder.
 
 ## Usage
 
@@ -165,8 +180,9 @@ The install uses only:
 - `~/.local/state/omarchy-trcc/` for settings, imported themes, previews and a
   single live image that gets overwritten
 - Temporary socket/lock in `$XDG_RUNTIME_DIR`
-- Optionally, `/etc/udev/rules.d/70-omarchy-trcc.rules` if you ran
-  `setup-usb.sh`
+- Optionally, if you ran `setup.sh`: `/etc/udev/rules.d/70-omarchy-trcc.rules`,
+  `/etc/systemd/system/omarchy-trcc-power.service` and
+  `/usr/local/libexec/omarchy-trcc-power` (`uninstall.sh --purge` removes them)
 
 It respects `XDG_CONFIG_HOME` and `XDG_STATE_HOME`. The built binary lives in
 `~/.local/state/omarchy-trcc/bin/`; the temporary build is deleted. Normal

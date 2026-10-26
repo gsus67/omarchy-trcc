@@ -28,6 +28,45 @@ jobs:
       - name: Plugin manifest
         run: python -c "import json; json.load(open('manifest.json'))"
 
+  service-hardening:
+    name: Service hardening
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install systemd tools
+        run: pacman -Syu --noconfirm --needed systemd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The relay runs as root: fail if its sandbox loses restrictions.
+      # Exposure is 0-100 (systemd shows it /10); the unit scores 7 today.
+      - name: Verify and score the power relay unit
+        run: |
+          mkdir -p /tmp/unit
+          sed 's|^ExecStart=.*|ExecStart=/usr/bin/true|' omarchy-trcc-power.service > /tmp/unit/omarchy-trcc-power.service
+          systemd-analyze verify /tmp/unit/omarchy-trcc-power.service
+          systemd-analyze security --offline=yes --threshold=15 --no-pager /tmp/unit/omarchy-trcc-power.service
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck (errors)
+        run: shellcheck --severity=error setup.sh install.sh uninstall.sh bin/power-relay.sh
+
+  zizmor:
+    name: zizmor (workflow security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit GitHub Actions workflows
+        run: pipx run zizmor==1.31.1 --offline --min-severity=medium .github/workflows
+
   codeql-cpp:
     name: CodeQL (c-cpp)
     runs-on: ubuntu-latest

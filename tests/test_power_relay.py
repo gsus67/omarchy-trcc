@@ -47,12 +47,19 @@ class RelayTest(unittest.TestCase):
             time.sleep(0.05)
         self.fail("relay published nothing")
 
+    def write_counter(self, value):
+        """Replace the fake counter atomically: sysfs is never read half-written,
+        while a plain truncate-and-write could hand the relay an empty file."""
+        staging = self.rapl / "energy_uj.tmp"
+        staging.write_text(f"{value}\n")
+        os.replace(staging, self.rapl / "energy_uj")
+
     def feed(self, start, watts, wraps=False):
         """Advance the fake counter by `watts` µJ per µs, in real time, and
         return the relay's second value: on a busy runner this feeder can
         stall while the relay starts, skewing only its first interval."""
         target = self.out / "cpu-watts"
-        (self.rapl / "energy_uj").write_text(f"{start}\n")
+        self.write_counter(start)
         self.start()
         began = time.monotonic()
         published = []
@@ -61,7 +68,7 @@ class RelayTest(unittest.TestCase):
             value = start + int((time.monotonic() - began) * 1e6 * watts)
             if wraps:
                 value %= 1000000000
-            (self.rapl / "energy_uj").write_text(f"{value}\n")
+            self.write_counter(value)
             if target.exists():
                 stamp = target.stat().st_mtime_ns
                 if not published or published[-1] != stamp:

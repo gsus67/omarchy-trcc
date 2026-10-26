@@ -416,7 +416,7 @@ Panel {
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             Button {
-              text: root.t("Sumar el resto del PC")
+              text: root.t("Sumar estimado")
               selected: estimatePage.choices.enabled === true
               enabled: !root.busy
               onClicked: estimatePage.set("enabled", estimatePage.choices.enabled ? "off" : "on")

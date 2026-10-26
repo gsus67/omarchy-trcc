@@ -97,7 +97,6 @@
     "Compilación terminada; archivos temporales eliminados.": "Build completed; temporary files removed.",
     "estimado": "estimated",
     "Tu PC no tiene un sensor del consumo total. Marca lo que lleva y se sumará a CPU + GPU como estimación (≈).": "Your PC has no sensor for its total power. Mark what it has and it is added to CPU + GPU as an estimate (≈).",
-    "Sumar el resto del PC": "Add the rest of the PC",
     "DETECTADO": "DETECTED",
     "disco duro": "hard drive",
     "Nada detectado": "Nothing detected",
@@ -113,6 +112,7 @@
     "No sé": "Don't know",
     "Resto del PC": "Rest of the PC",
     "Total en el enchufe": "Total at the wall",
-    "Ventiladores sin RGB": "Fans without RGB"
+    "Ventiladores sin RGB": "Fans without RGB",
+    "Sumar estimado": "Add estimate"
   }
 }

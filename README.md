@@ -72,7 +72,7 @@ On a desktop without a PSU sensor or battery the panel adds a **Power** tab to
 estimate the rest of the PC. RAM modules (DDR4/DDR5 sensors), NVMe and internal
 SATA drives are detected; you mark the motherboard size, fans without and with
 RGB (each fan in one of them), air or liquid cooling, other RGB and the PSU's 80 PLUS rating. With "Add
-the rest of the PC" on, the total becomes `≈ X W`: CPU + GPU plus those parts,
+estimate" on, the total becomes `≈ X W`: CPU + GPU plus those parts,
 divided by the PSU's efficiency (wall power). The RAM row always shows its
 modules' estimated watts. These are typical values (DDR5 4 W, DDR4 3 W, NVMe
 4 W, SATA SSD 2 W, HDD 6 W, fan 1.5 W, RGB fan 3 W, pump 5–7 W, board

@@ -714,7 +714,7 @@ public:
             } else if (layout == "omarchy" || layout == "picture" || layout == "fx") {
                 // ttfx (the Omarchy screensaver's effects, in color) when it runs
                 // for this layout; otherwise the built-in effects.
-                QRectF area = layout == "omarchy" ? QRectF(40,88,1200,250) : layout == "picture" ? QRectF(0,0,W,H) : QRectF(140,100,1000,285);
+                QRectF area = layout == "omarchy" ? QRectF(40,88,1200,250) : layout == "picture" ? QRectF(0,0,W,H) : QRectF(40,88,1200,300);
                 scenes::LogoScene &scene = layout == "omarchy" ? logo : layout == "picture" ? picture : fx;
                 if (layout == "fx") { fx.setText(fxRows()); ttfx.setLive(fxRows()); }
                 if (ttfxFor == layout && ttfx.started()) ttfx.draw(painter, area, palette.font, palette.foreground);
@@ -975,7 +975,8 @@ public:
         if(useTtfx) {
             if(ttfxFor!=layout||!ttfx.started()||ttfx.step(frameMs/1000.0)) {
                 if(layout=="omarchy") logo.load(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/omarchy/branding/screensaver.txt");
-                int fps=settings["fps"].toInt(); ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:15);
+                int fps=settings["fps"].toInt(); // Omarchy FX gets a tight canvas so its few rows are drawn large.
+                ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:15,layout=="fx"?4:8,layout=="fx"?2:4);
                 ttfxFor=layout;
             }
         } else {

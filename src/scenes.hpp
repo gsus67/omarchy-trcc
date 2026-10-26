@@ -277,11 +277,11 @@ public:
     static bool available() { static const bool found = !QStandardPaths::findExecutable("ttfx").isEmpty(); return found; }
     bool running() const { return process && process->state() != QProcess::NotRunning; }
     // Starts a random effect on `text` inside a canvas with some room around it.
-    void start(const QStringList &text, int fps) {
+    void start(const QStringList &text, int fps, int padColumns = 8, int padRows = 4) {
         stop();
         lines = text; textColumns = 1;
         for (const QString &line : text) textColumns = std::max(textColumns, int(line.size()));
-        width = textColumns + 8; height = int(text.size()) + 4;
+        width = textColumns + padColumns; height = int(text.size()) + padRows; homeRow = homeColumn = -1;
         chars = QVector<QChar>(qsizetype(width) * height, ' ');
         colors = QVector<QRgb>(qsizetype(width) * height, 0);
         row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
@@ -309,7 +309,7 @@ public:
         elapsed += seconds;
         if (running() && elapsed < maxSeconds) return false;
         if (running()) stop();
-        if (finishedAt < 0) finishedAt = elapsed;
+        if (finishedAt < 0) { finishedAt = elapsed; locate(); }
         return elapsed - finishedAt >= holdSeconds;
     }
     bool animating() const { return running(); }
@@ -353,13 +353,13 @@ public:
         QPointF origin(area.center().x() - cell * width / 2, area.center().y() - lineHeight * height / 2);
         painter.setFont(font);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        int top = (height - int(lines.size())) / 2, left = (width - textColumns) / 2;
+        int top = homeRow, left = homeColumn;
         for (int r = 0; r < height; ++r)
             for (int c = 0; c < width; ++c) {
                 QChar ch = chars[qsizetype(r) * width + c];
                 QRgb rgb = colors[qsizetype(r) * width + c];
                 // Holding: show the live text at its home cells.
-                if (!running() && r >= top && r - top < lines.size() && c >= left) {
+                if (!running() && top >= 0 && r >= top && r - top < lines.size() && c >= left) {
                     const QString &line = lines[r - top];
                     if (c - left < line.size()) ch = line[c - left];
                 }
@@ -378,7 +378,7 @@ public:
     QRgb colorAt(int r, int c) const { return colors.value(qsizetype(r) * width + c); }
     // For tests: a grid without a process.
     void prepare(int columns, int rowsWanted) {
-        stop(); width = columns; height = rowsWanted; textColumns = columns; lines.clear();
+        stop(); width = columns; height = rowsWanted; textColumns = columns; lines.clear(); homeRow = homeColumn = -1;
         chars = QVector<QChar>(qsizetype(width) * height, ' '); colors = QVector<QRgb>(qsizetype(width) * height, 0);
         row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
     }
@@ -391,6 +391,21 @@ private:
     State state = Normal; QString params; QRgb current = 0;
     QStringDecoder decoder{QStringDecoder::Utf8};
     double elapsed = 0, finishedAt = -1;
+    // Where ttfx left the text (its first line), found in the final frame;
+    // -1 when not found, and then live text is not overlaid.
+    int homeRow = -1, homeColumn = -1;
+    void locate() {
+        homeRow = homeColumn = -1;
+        if (lines.isEmpty()) return;
+        QString first = lines.first();
+        while (first.endsWith(' ')) first.chop(1);
+        if (first.isEmpty()) return;
+        for (int r = 0; r < height; ++r) {
+            QString rowText(chars.constData() + qsizetype(r) * width, width);
+            int column = rowText.indexOf(first);
+            if (column >= 0) { homeRow = r; homeColumn = column; return; }
+        }
+    }
     void csi(ushort final) {
         QStringList parts = params.split(';');
         int n = std::max(1, parts.value(0).toInt());

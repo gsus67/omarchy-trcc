@@ -903,7 +903,8 @@ public:
         if(settings["layout"].toString()=="picture") return picture.animating()?15:2;
         return 10;
     }
-    // Reads a PNG/JPG/WebP (≤ 20 MB, ≤ 10000 px a side, ≤ 64 MB decoded) and
+    // Reads a PNG/JPG/WebP (≤ 20 MB, ≤ 10000 px a side, Qt's 256 MB decode cap),
+    // decoded straight at a small size (JPEG scales while decoding), and
     // stores it as block art in picture.txt. Returns an error message or "".
     QString pictureFrom(const QString &path) {
         QFileInfo input(path);
@@ -911,9 +912,10 @@ public:
         if(input.size()>20*1024*1024) return uiText("El archivo supera 20 MB.");
         if(!QStringList{"png","jpg","jpeg","webp"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP.");
         QImageReader reader(input.canonicalFilePath());
-        reader.setAllocationLimit(64);
+        reader.setAllocationLimit(256);
         QSize size=reader.size();
         if(!size.isValid()||size.width()>10000||size.height()>10000) return uiText("No se pudo leer la imagen.");
+        reader.setScaledSize(size.scaled(640,640,Qt::KeepAspectRatio));
         QStringList art=scenes::imageToBlocks(reader.read());
         if(art.isEmpty()) return uiText("No se pudo leer la imagen.");
         QSaveFile file(stateDir+"/picture.txt");

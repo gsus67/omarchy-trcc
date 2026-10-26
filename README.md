@@ -77,7 +77,8 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
   effect each cycle, like the Omarchy screensaver); Omarchy FX (the CPU/GPU/RAM
   rows assembling with those effects); and Picture FX (a picture you choose in
   Themes → Picture FX → **Choose picture…**, turned into block art with the same
-  effects; only the block art is kept, not a copy of the picture). The screen also follows the system palette automatically.
+  effects; only the block art is kept, not a copy of the picture; up to 20 MB and
+  10000 px a side). The screen also follows the system palette automatically.
 - Animation FPS in Display: Auto (recommended), 4, 8, 15 or 30, for the visuals
   and the animated layouts only; static layouts send one frame a second. Auto
   runs Omarchy at 15 while the art assembles and 2 while it holds, Matrix at

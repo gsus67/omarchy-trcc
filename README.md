@@ -24,7 +24,7 @@ The panel tabs (Home is shown above; Power is under [Compatibility](#compatibili
   </tr>
 </table>
 
-Built-in layouts as the Trofeo shows them (1280×480, here at half size):
+Built-in layouts as the Trofeo shows them (the animated ones are recordings of the real screen) (1280×480, here at half size):
 
 <table>
   <tr>
@@ -43,13 +43,13 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
   </tr>
   <tr><td align="center">Gauges</td><td align="center">Clock</td></tr>
   <tr>
-    <td><img src="assets/gallery/lcd-matrix.png" alt="Matrix" width="400"></td>
-    <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
+    <td><img src="assets/gallery/lcd-matrix.gif" alt="Matrix" width="400"></td>
+    <td><img src="assets/gallery/lcd-omarchy.gif" alt="Omarchy" width="400"></td>
   </tr>
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
   <tr>
-    <td><img src="assets/gallery/lcd-fx.png" alt="Metrics FX" width="400"></td>
-    <td><img src="assets/gallery/lcd-picture.png" alt="Picture FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-fx.gif" alt="Metrics FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-picture.gif" alt="Picture FX" width="400"></td>
   </tr>
   <tr><td align="center">Metrics FX</td><td align="center">Picture FX</td></tr>
 </table>

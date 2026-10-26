@@ -23,7 +23,7 @@ Las pestañas del panel (Inicio está arriba; Consumo, en [Compatibilidad](#comp
   </tr>
 </table>
 
-Los diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
+Los diseños propios tal como los muestra la Trofeo (los animados son grabaciones de la pantalla real) (1280×480, aquí a la mitad):
 
 <table>
   <tr>
@@ -42,13 +42,13 @@ Los diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad
   </tr>
   <tr><td align="center">Gauges</td><td align="center">Clock</td></tr>
   <tr>
-    <td><img src="assets/gallery/lcd-matrix.png" alt="Matrix" width="400"></td>
-    <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
+    <td><img src="assets/gallery/lcd-matrix.gif" alt="Matrix" width="400"></td>
+    <td><img src="assets/gallery/lcd-omarchy.gif" alt="Omarchy" width="400"></td>
   </tr>
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
   <tr>
-    <td><img src="assets/gallery/lcd-fx.png" alt="Métricas FX" width="400"></td>
-    <td><img src="assets/gallery/lcd-picture.png" alt="Picture FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-fx.gif" alt="Métricas FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-picture.gif" alt="Picture FX" width="400"></td>
   </tr>
   <tr><td align="center">Métricas FX</td><td align="center">Picture FX</td></tr>
 </table>

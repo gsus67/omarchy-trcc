@@ -48,18 +48,27 @@ class RelayTest(unittest.TestCase):
         self.fail("relay published nothing")
 
     def feed(self, start, watts, wraps=False):
-        """Advance the fake counter by `watts` µJ per µs, in real time."""
+        """Advance the fake counter by `watts` µJ per µs, in real time, and
+        return the relay's second value: on a busy runner this feeder can
+        stall while the relay starts, skewing only its first interval."""
+        target = self.out / "cpu-watts"
         (self.rapl / "energy_uj").write_text(f"{start}\n")
         self.start()
         began = time.monotonic()
-        value = start
-        while not (self.out / "cpu-watts").exists() and time.monotonic() - began < 4:
-            time.sleep(0.02)
+        published = []
+        while len(published) < 2 and time.monotonic() - began < 8:
+            time.sleep(0.005)
             value = start + int((time.monotonic() - began) * 1e6 * watts)
             if wraps:
                 value %= 1000000000
             (self.rapl / "energy_uj").write_text(f"{value}\n")
-        return self.wait_for_value()
+            if target.exists():
+                stamp = target.stat().st_mtime_ns
+                if not published or published[-1] != stamp:
+                    published.append(stamp)
+        if len(published) < 2:
+            self.fail("relay published fewer than two values")
+        return target.read_text()
 
     def test_publishes_whole_watts_only(self):
         text = self.feed(5_000_000, 42)
@@ -69,7 +78,8 @@ class RelayTest(unittest.TestCase):
         self.assertEqual((self.out / "cpu-watts").stat().st_mode & 0o777, 0o644)
 
     def test_counter_wrap(self):
-        text = self.feed(999_990_000, 30, wraps=True)
+        # 30 W reaches the 1e9 µJ range at ~1.5 s: inside the checked second interval.
+        text = self.feed(955_000_000, 30, wraps=True)
         self.assertLessEqual(abs(int(text) - 30), 2)
 
     def test_without_rapl_exits_quietly(self):

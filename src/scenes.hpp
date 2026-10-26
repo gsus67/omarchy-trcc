@@ -114,34 +114,39 @@ public:
             reset(i, true);
         }
         // Start mid-fall, so the first frame and previews are already full.
-        for (int i = 0; i < 40; ++i) step();
+        for (int i = 0; i < 40; ++i) step(0.125);
     }
-    void step() {
+    // Advances by real time, so the rain falls at the same speed at any FPS
+    // (speeds are rows per second).
+    void step(double seconds) {
+        changes += seconds * 8 * columns;
         for (int i = 0; i < columns; ++i) {
-            heads[i] += speeds[i];
+            heads[i] += speeds[i] * seconds;
             if (heads[i] - trail > rows) reset(i, false);
-            cells[i][random() % rows] = glyph(random());
         }
+        for (; changes >= 1; changes -= 1) cells[random() % columns][random() % rows] = glyph(random());
     }
     void draw(QPainter &painter, const QString &family, const QColor &head, const QColor &tail) const {
         QFont font(family); font.setPixelSize(20); font.setBold(true); painter.setFont(font);
+        // Glyphs slide by pixels (not whole rows), so the fall looks smooth.
         for (int i = 0; i < columns; ++i)
             for (int k = 0; k < trail; ++k) {
-                int row = int(heads[i]) - k;
+                double y = (heads[i] - k) * cellHeight;
+                int row = int(std::floor(heads[i] - k));
                 if (row < 0 || row >= rows) continue;
                 QColor color = k == 0 ? head : tail;
                 if (k) color.setAlphaF(0.9 * (1 - double(k) / trail));
                 painter.setPen(color);
-                painter.drawText(QRectF(i * cellWidth, row * cellHeight, cellWidth, cellHeight), Qt::AlignCenter, QString(cells[i][row]));
+                painter.drawText(QRectF(i * cellWidth, y, cellWidth, cellHeight), Qt::AlignCenter, QString(cells[i][row]));
             }
     }
 private:
-    double heads[columns]{}, speeds[columns]{};
+    double heads[columns]{}, speeds[columns]{}, changes = 0;
     QChar cells[columns][rows];
     static quint32 random() { return QRandomGenerator::global()->generate(); }
     void reset(int i, bool anywhere) {
         heads[i] = anywhere ? -double(random() % (rows * 2)) : -double(random() % rows);
-        speeds[i] = 0.35 + (random() % 100) / 100.0 * 0.65;
+        speeds[i] = 2.8 + (random() % 100) / 100.0 * 5.2;  // 2.8–8 rows a second
     }
 };
 

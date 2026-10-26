@@ -961,6 +961,7 @@ public:
     // The chosen rate, or auto: fast only while something moves. Omarchy runs
     // at 15 while the art assembles and 2 while it holds; Matrix at 10; audio
     // visuals at 15 with sound and 4 in silence; 4 whenever the CPU is busy.
+    // (Matrix runs at 15: its glyphs slide by pixels and need the frames.)
     int frameRate() const {
         int chosen=settings["fps"].toInt();
         if(chosen>0) return chosen;
@@ -971,7 +972,7 @@ public:
         if(layout=="omarchy") return logo.animating()?15:2;
         if(layout=="fx") return fx.animating()?15:2;
         if(layout=="picture") return picture.animating()?15:2;
-        return 10;
+        return 15;
     }
     // Turns a picture (≤ 20 MB) into text art in picture.txt, the same way
     // `omarchy branding screensaver image` does: Omarchy's own
@@ -1074,7 +1075,7 @@ public:
         if(now-lastFrame<frameMs-frameMs/8) return;
         if(!active.isEmpty()) analyze();
         phase+=frameMs/1000.0;
-        if(active.isEmpty()&&layout=="matrix") rain.step();
+        if(active.isEmpty()&&layout=="matrix") rain.step(frameMs/1000.0);
         // Omarchy, Omarchy FX and Picture FX use ttfx when the system has it:
         // run an effect, hold the result, then the next one.
         bool useTtfx=active.isEmpty()&&(layout=="omarchy"||layout=="fx"||layout=="picture")&&scenes::TtfxScene::available();
@@ -1163,7 +1164,7 @@ int main(int argc,char **argv) {
         // The sender thread takes frames while the main thread asks about USB.
         for(int i=0;i<50;++i) { engine.sender.submit(QImage(W,H,QImage::Format_RGB32),0); ok=ok&&!engine.usbConnected(); }
         // Animations move only when stepped; frame rates are a fixed menu.
-        for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); engine.fx.step(.25); }
+        for(int i=0;i<40;++i) { engine.rain.step(.125); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
         ok=ok&&!engine.render("fx","").isNull()&&engine.fx.lines.size()==3&&engine.fx.lines[0].startsWith("CPU");
         // ttfx output: moves, save/restore and truecolor land in the grid; other
@@ -1221,9 +1222,9 @@ int main(int argc,char **argv) {
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
         engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
         engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;
-        // Auto: Matrix 10, Omarchy 2 while holding, 4 with a busy CPU.
+        // Auto: Matrix 15, Omarchy 2 while holding, 4 with a busy CPU.
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"auto"}}})["ok"].toBool()&&engine.settings["fps"].toInt(-1)==0;
-        engine.settings["layout"]="matrix"; engine.metrics.cpu=10; ok=ok&&engine.frameRate()==10;
+        engine.settings["layout"]="matrix"; engine.metrics.cpu=10; ok=ok&&engine.frameRate()==15;
         engine.metrics.cpu=90; ok=ok&&engine.frameRate()==4; engine.metrics.cpu=10;
         engine.settings["layout"]="omarchy"; while(engine.logo.animating()) engine.logo.step(.5);
         ok=ok&&engine.frameRate()==2; engine.settings["layout"]="focus";

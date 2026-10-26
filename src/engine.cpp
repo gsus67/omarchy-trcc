@@ -857,6 +857,13 @@ public:
         save(); lastFrame=0;
         return {{"ok",true},{"message",uiText("Cambio aplicado")}};
     }
+    // How often the main loop must wake: the animation frame time while one runs
+    // (so 15 and 30 FPS are real), otherwise the usual 125 ms.
+    int tickInterval() const {
+        bool game=settings["game"].toBool()&&metrics.cpu>75;
+        bool animated=(!game&&!visual().isEmpty())||animatedLayouts.contains(settings["layout"].toString());
+        return animated?std::min(125,1000/settings["fps"].toInt(8)):125;
+    }
     void tick() {
         qint64 now=QDateTime::currentMSecsSinceEpoch();
         if(now-lastSample>=1000) {
@@ -957,6 +964,8 @@ int main(int argc,char **argv) {
         for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
+        engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
+        engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;
         ok=ok&&!engine.command({{"command","fps"},{"args",QJsonArray{"7"}}})["ok"].toBool()&&!engine.command({{"command","fps"},{"args",QJsonArray{"x"}}})["ok"].toBool();
         // The branding art is plain text: control characters dropped, size capped,
         // and a missing file keeps the art already loaded.
@@ -1099,6 +1108,8 @@ int main(int argc,char **argv) {
     if(!lock.tryLock(100)) { QTextStream(stderr)<<"El motor Trofeo ya está ejecutándose\n"; return 1; }
     engine.previews();
     if(!engine.listen()) { QTextStream(stderr)<<engine.server.errorString()<<'\n'; return 1; }
-    QTimer timer; QObject::connect(&timer,&QTimer::timeout,[&]{engine.tick();}); timer.start(125);
+    QTimer timer;
+    QObject::connect(&timer,&QTimer::timeout,[&]{ engine.tick(); if(timer.interval()!=engine.tickInterval()) timer.setInterval(engine.tickInterval()); });
+    timer.start(125);
     return app.exec();
 }

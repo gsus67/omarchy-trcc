@@ -438,7 +438,7 @@ Panel {
                 {key: "dimms", name: "Módulos de RAM", step: 1, max: 8, unit: "", manual: true},
                 {key: "fans", name: "Ventiladores sin RGB", step: 1, max: 20, unit: ""},
                 {key: "rgbFans", name: "Ventiladores con RGB", step: 1, max: 20, unit: ""},
-                {key: "rgbWatts", name: "Otros RGB (tiras, etc.)", step: 5, max: 200, unit: " W"}
+                {key: "rgbStrips", name: "Tiras RGB", step: 1, max: 20, unit: ""}
               ]
               Row {
                 required property var modelData
@@ -495,14 +495,65 @@ Panel {
                 }
               }
             }
-            Text {
-              textFormat: Text.PlainText
-              width: parent.width
-              wrapMode: Text.WordWrap
+            // Where the estimate comes from, part by part, then the sums.
+            PanelSectionHeader { text: root.t("RESTO DEL PC"); foreground: root.barForeground }
+            Repeater {
+              model: [{key: "board", name: "Placa base"}, {key: "ram", name: "RAM"}, {key: "drives", name: "Discos"},
+                      {key: "fans", name: "Ventiladores"}, {key: "cooling", name: "Refrigeración"}, {key: "rgb", name: "Tiras RGB"}]
+              Item {
+                required property var modelData
+                readonly property real watts: (estimatePage.readings.estimateParts || ({}))[modelData.key] || 0
+                visible: watts > 0
+                width: estimatePage.width
+                height: visible ? partName.implicitHeight : 0
+                Text {
+                  id: partName
+                  textFormat: Text.PlainText
+                  text: root.t(parent.modelData.name)
+                  color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                }
+                Text {
+                  anchors.right: parent.right
+                  textFormat: Text.PlainText
+                  text: "≈ " + Number(parent.watts).toLocaleString(Qt.locale(), "f", parent.watts % 1 ? 1 : 0) + " W"
+                  color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                }
+              }
+            }
+            Item {
               readonly property var r: estimatePage.readings
-              text: root.t("Resto del PC") + " ≈ " + Math.round(r.extraPower || 0) + " W"
-                + (r.powerEstimated ? "  ·  " + root.t("Total en el enchufe") + " ≈ " + Math.round(r.power || 0) + " W" : "")
-              color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              width: parent.width
+              height: restTotal.implicitHeight
+              Text {
+                id: restTotal
+                textFormat: Text.PlainText
+                text: root.t("Resto del PC")
+                color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+              Text {
+                anchors.right: parent.right
+                textFormat: Text.PlainText
+                text: "≈ " + Math.round(parent.r.extraPower || 0) + " W"
+                color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+            }
+            Item {
+              readonly property var r: estimatePage.readings
+              visible: r.powerEstimated === true
+              width: parent.width
+              height: visible ? wallTotal.implicitHeight : 0
+              Text {
+                id: wallTotal
+                textFormat: Text.PlainText
+                text: root.t("Total en el enchufe")
+                color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
+              Text {
+                anchors.right: parent.right
+                textFormat: Text.PlainText
+                text: "≈ " + Math.round(parent.r.power || 0) + " W"
+                color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
+              }
             }
           }
 

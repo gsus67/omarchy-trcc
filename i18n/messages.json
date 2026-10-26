@@ -102,7 +102,6 @@
     "Nada detectado": "Nothing detected",
     "Módulos de RAM": "RAM modules",
     "Ventiladores con RGB": "Fans with RGB",
-    "Otros RGB (tiras, etc.)": "Other RGB (strips, etc.)",
     "PLACA BASE": "MOTHERBOARD",
     "REFRIGERACIÓN": "COOLING",
     "FUENTE (80 PLUS)": "PSU (80 PLUS)",
@@ -113,6 +112,12 @@
     "Resto del PC": "Rest of the PC",
     "Total en el enchufe": "Total at the wall",
     "Ventiladores sin RGB": "Fans without RGB",
-    "≈ Incluir en el total": "≈ Include in total"
+    "≈ Incluir en el total": "≈ Include in total",
+    "Tiras RGB": "RGB strips",
+    "RESTO DEL PC": "REST OF THE PC",
+    "Placa base": "Motherboard",
+    "Discos": "Drives",
+    "Refrigeración": "Cooling",
+    "Ventiladores": "Fans"
   }
 }

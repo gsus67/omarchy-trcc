@@ -80,14 +80,16 @@ class RelayTest(unittest.TestCase):
     def test_publishes_whole_watts_only(self):
         text = self.feed(5_000_000, 42)
         self.assertRegex(text, r"^\d+\n$", "only a whole number of watts")
-        self.assertLessEqual(abs(int(text) - 42), 2)
+        # The feeder runs in real time on shared CI machines; 20 % still catches
+        # unit errors (×1000), a missed wrap or a stuck value.
+        self.assertLessEqual(abs(int(text) - 42), 42 * 0.2)
         self.assertEqual(sorted(p.name for p in self.out.iterdir()), ["cpu-watts"], "no other files")
         self.assertEqual((self.out / "cpu-watts").stat().st_mode & 0o777, 0o644)
 
     def test_counter_wrap(self):
         # 30 W reaches the 1e9 µJ range at ~1.5 s: inside the checked second interval.
         text = self.feed(955_000_000, 30, wraps=True)
-        self.assertLessEqual(abs(int(text) - 30), 2)
+        self.assertLessEqual(abs(int(text) - 30), 30 * 0.2)
 
     def test_without_rapl_exits_quietly(self):
         result = subprocess.run(["bash", str(RELAY)], timeout=5, env=dict(

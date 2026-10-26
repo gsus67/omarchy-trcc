@@ -8,6 +8,9 @@
 #include <QFontMetricsF>
 #include <QImage>
 #include <QPainter>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QStringDecoder>
 #include <QRandomGenerator>
 #include <QStringList>
 #include <QVector>
@@ -65,7 +68,7 @@ inline QStringList imageToBlocks(const QImage &source) {
     int columns = 160, rows = std::max(1, int(std::ceil(columns * double(source.height()) / source.width() / 2)));
     if (rows > 40) { rows = 40; columns = std::max(1, int(rows * 2.0 * source.width() / source.height())); }
     QImage small = source.convertToFormat(QImage::Format_ARGB32).scaled(columns, rows * 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    QVector<double> gray(columns * rows * 2), alpha(columns * rows * 2);
+    QVector<double> gray(qsizetype(columns) * rows * 2), alpha(qsizetype(columns) * rows * 2);
     double sum = 0;
     for (int y = 0; y < rows * 2; ++y)
         for (int x = 0; x < columns; ++x) {
@@ -259,6 +262,150 @@ private:
         quint32 x = quint32(index) * 2654435761u ^ (salt + quint32(lane) * 0x9e3779b9u);
         x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
         return (x & 0xffffff) / double(0x1000000);
+    }
+};
+
+// The Omarchy screensaver's own engine: runs the system's ttfx (package ttfx,
+// part of Omarchy) on our text and reads its frames into a cell grid, so all
+// of its effects and colors show on the LCD. Nothing is installed; without
+// ttfx the layouts fall back to LogoScene. ttfx gets the text on stdin and a
+// fixed argument list (no shell); its output is parsed, never executed.
+class TtfxScene {
+public:
+    static constexpr double holdSeconds = 4, maxSeconds = 25;
+    ~TtfxScene() { stop(); }
+    static bool available() { static const bool found = !QStandardPaths::findExecutable("ttfx").isEmpty(); return found; }
+    bool running() const { return process && process->state() != QProcess::NotRunning; }
+    // Starts a random effect on `text` inside a canvas with some room around it.
+    void start(const QStringList &text, int fps) {
+        stop();
+        lines = text; textColumns = 1;
+        for (const QString &line : text) textColumns = std::max(textColumns, int(line.size()));
+        width = textColumns + 8; height = int(text.size()) + 4;
+        chars = QVector<QChar>(qsizetype(width) * height, ' ');
+        colors = QVector<QRgb>(qsizetype(width) * height, 0);
+        row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
+        elapsed = 0; finishedAt = -1;
+        process = std::make_unique<QProcess>();
+        process->setProcessChannelMode(QProcess::SeparateChannels);
+        process->setStandardErrorFile(QProcess::nullDevice());
+        QObject::connect(process.get(), &QProcess::readyReadStandardOutput, [this] { feed(process->readAllStandardOutput()); });
+        process->start("ttfx", {"--frame-rate", QString::number(std::clamp(fps, 2, 30)),
+                                "--canvas-width", QString::number(width), "--canvas-height", QString::number(height),
+                                "--anchor-canvas", "c", "--anchor-text", "c", "--ignore-terminal-dimensions",
+                                "--no-eol", "--no-restore-cursor", "--random-effect"});
+        process->write(text.join('\n').toUtf8());
+        process->closeWriteChannel();
+    }
+    void stop() {
+        if (!process) return;
+        process->disconnect();
+        if (process->state() != QProcess::NotRunning) { process->kill(); process->waitForFinished(500); }
+        process.reset();
+    }
+    // Advances the cycle: run, hold the final frame, then a new effect.
+    // Returns true when the caller should start the next effect.
+    bool step(double seconds) {
+        elapsed += seconds;
+        if (running() && elapsed < maxSeconds) return false;
+        if (running()) stop();
+        if (finishedAt < 0) finishedAt = elapsed;
+        return elapsed - finishedAt >= holdSeconds;
+    }
+    bool animating() const { return running(); }
+    bool started() const { return !chars.isEmpty(); }
+    // Parses ttfx output: printable text, newlines, ESC 7/8 (save/restore
+    // cursor), CSI n A/B/C/D (moves) and SGR 38;2;r;g;b / 0 (colors).
+    void feed(const QByteArray &bytes) {
+        const QString text = decoder(bytes);
+        for (QChar ch : text) {
+            ushort c = ch.unicode();
+            if (state == Escape) {
+                if (c == '[') { state = Csi; params.clear(); }
+                else { if (c == '7') { savedRow = row; savedCol = col; } else if (c == '8') { row = savedRow; col = savedCol; } state = Normal; }
+                continue;
+            }
+            if (state == Csi) {
+                if ((c >= '0' && c <= '9') || c == ';' || c == '?') { if (params.size() < 64) params += ch; continue; }
+                csi(c); state = Normal; continue;
+            }
+            if (c == 0x1b) state = Escape;
+            else if (c == '\n') { ++row; col = 0; }
+            else if (c == '\r') col = 0;
+            else if (c >= 0x20) {
+                if (row >= 0 && row < height && col >= 0 && col < width) {
+                    chars[qsizetype(row) * width + col] = ch;
+                    colors[qsizetype(row) * width + col] = ch.isSpace() ? 0 : current;
+                }
+                ++col;
+            }
+        }
+    }
+    // While holding, live text replaces the characters but keeps ttfx's final colors.
+    void setLive(const QStringList &text) { if (!running() && text.size() == lines.size()) lines = text; }
+    void draw(QPainter &painter, const QRectF &area, const QString &family, const QColor &fallback) const {
+        if (chars.isEmpty()) return;
+        QFont font(family); font.setPixelSize(100);
+        double ratio = QFontMetricsF(font).horizontalAdvance('M') / 100.0;
+        double size = std::min(area.height() / height / 1.15, area.width() / width / std::max(0.1, ratio));
+        font.setPixelSize(std::max(4, int(size)));
+        double cell = std::max(1.0, QFontMetricsF(font).horizontalAdvance('M')), lineHeight = font.pixelSize() * 1.15;
+        QPointF origin(area.center().x() - cell * width / 2, area.center().y() - lineHeight * height / 2);
+        painter.setFont(font);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        int top = (height - int(lines.size())) / 2, left = (width - textColumns) / 2;
+        for (int r = 0; r < height; ++r)
+            for (int c = 0; c < width; ++c) {
+                QChar ch = chars[qsizetype(r) * width + c];
+                QRgb rgb = colors[qsizetype(r) * width + c];
+                // Holding: show the live text at its home cells.
+                if (!running() && r >= top && r - top < lines.size() && c >= left) {
+                    const QString &line = lines[r - top];
+                    if (c - left < line.size()) ch = line[c - left];
+                }
+                if (ch.isSpace()) continue;
+                QColor color = rgb ? QColor::fromRgb(rgb) : fallback;
+                QRectF box(origin.x() + c * cell, origin.y() + r * lineHeight, cell, lineHeight);
+                if (drawBlock(painter, box, ch, color)) continue;
+                painter.setPen(color);
+                painter.drawText(box.adjusted(0, 0, cell * .05, 0), Qt::AlignLeft | Qt::AlignVCenter, QString(ch));
+            }
+        painter.setRenderHint(QPainter::Antialiasing, true);
+    }
+    int columnsCount() const { return width; }
+    int rowsCount() const { return height; }
+    QChar at(int r, int c) const { return chars.value(qsizetype(r) * width + c); }
+    QRgb colorAt(int r, int c) const { return colors.value(qsizetype(r) * width + c); }
+    // For tests: a grid without a process.
+    void prepare(int columns, int rowsWanted) {
+        stop(); width = columns; height = rowsWanted; textColumns = columns; lines.clear();
+        chars = QVector<QChar>(qsizetype(width) * height, ' '); colors = QVector<QRgb>(qsizetype(width) * height, 0);
+        row = col = savedRow = savedCol = 0; state = Normal; current = 0; decoder = QStringDecoder(QStringDecoder::Utf8);
+    }
+private:
+    enum State { Normal, Escape, Csi };
+    std::unique_ptr<QProcess> process;
+    QStringList lines;
+    QVector<QChar> chars; QVector<QRgb> colors;
+    int width = 0, height = 0, textColumns = 1, row = 0, col = 0, savedRow = 0, savedCol = 0;
+    State state = Normal; QString params; QRgb current = 0;
+    QStringDecoder decoder{QStringDecoder::Utf8};
+    double elapsed = 0, finishedAt = -1;
+    void csi(ushort final) {
+        QStringList parts = params.split(';');
+        int n = std::max(1, parts.value(0).toInt());
+        if (final == 'A') row -= n; else if (final == 'B') row += n;
+        else if (final == 'C') col += n; else if (final == 'D') col = std::max(0, col - n);
+        else if (final == 'm') {
+            for (int i = 0; i < parts.size(); ++i) {
+                int code = parts[i].toInt();
+                if (parts[i].isEmpty() || code == 0 || code == 39) current = 0;
+                else if (code == 38 && parts.value(i + 1) == "2" && i + 4 < parts.size()) {
+                    current = qRgb(std::clamp(parts[i + 2].toInt(), 0, 255), std::clamp(parts[i + 3].toInt(), 0, 255), std::clamp(parts[i + 4].toInt(), 0, 255)) | 0xff000000;
+                    i += 4;
+                } else if (code == 48 && parts.value(i + 1) == "2") i += 4;
+            }
+        }
     }
 };
 

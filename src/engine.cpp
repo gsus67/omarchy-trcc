@@ -489,6 +489,8 @@ public:
     scenes::LogoScene fx;
     // Picture FX: the user's picture as block art with the same effects.
     scenes::LogoScene picture;
+    // ttfx running for one of the three layouts above ("" when idle).
+    scenes::TtfxScene ttfx; QString ttfxFor;
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
@@ -591,6 +593,15 @@ public:
                              pair("RAM", metrics.ramUsedGiB, metrics.ramTotalGiB, "GiB")};
         parts.removeAll(QString());
         return parts;
+    }
+    // Omarchy FX text: fixed-width rows so columns line up while effects run.
+    QStringList fxRows() const {
+        QStringList rows;
+        for (const Field &field : fieldData()) {
+            QStringList parts = field.detail.split(QString::fromUtf8("  ·  "));
+            rows << QString("%1 %2 %3 %4").arg(field.label, -3).arg(field.value, 4).arg(parts.value(0), 4).arg(parts.value(1), 6);
+        }
+        return rows;
     }
     // Total watts and date for the header, next to the time.
     QString headerInfo() const {
@@ -700,22 +711,15 @@ public:
                 image.fill(palette.background.darker(160));
                 rain.draw(painter, palette.font, palette.foreground, palette.green);
                 painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,405,W,75), band);
-            } else if (layout == "omarchy")
-                logo.draw(painter, {40,92,1200,240}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
-            else if (layout == "picture") {
-                // Full screen behind the data, like Matrix, so the picture is large.
-                picture.draw(painter, {0,0,W,H}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
-                painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,335,W,145), band);
-            }
-            else if (layout == "fx") {
-                // Fixed-width rows so columns line up while the effect assembles them.
-                QStringList rows;
-                for (const Field &field : data) {
-                    QStringList parts = field.detail.split(QString::fromUtf8("  ·  "));
-                    rows << QString("%1 %2 %3 %4").arg(field.label, -3).arg(field.value, 4).arg(parts.value(0), 4).arg(parts.value(1), 6);
-                }
-                fx.setText(rows);
-                fx.draw(painter, {140,108,1000,270}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            } else if (layout == "omarchy" || layout == "picture" || layout == "fx") {
+                // ttfx (the Omarchy screensaver's effects, in color) when it runs
+                // for this layout; otherwise the built-in effects.
+                QRectF area = layout == "omarchy" ? QRectF(40,88,1200,250) : layout == "picture" ? QRectF(0,0,W,H) : QRectF(140,100,1000,285);
+                scenes::LogoScene &scene = layout == "omarchy" ? logo : layout == "picture" ? picture : fx;
+                if (layout == "fx") { fx.setText(fxRows()); ttfx.setLive(fxRows()); }
+                if (ttfxFor == layout && ttfx.started()) ttfx.draw(painter, area, palette.font, palette.foreground);
+                else scene.draw(painter, area, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+                if (layout == "picture") { painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,335,W,145), band); }
             }
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
             // The time leads the header, with the PC total and the date beside it;
@@ -901,9 +905,11 @@ public:
         if(chosen>0) return chosen;
         if(metrics.cpu>75) return 4;
         if(!visual().isEmpty()) return *std::max_element(levels.begin(),levels.end())<.02?4:15;
-        if(settings["layout"].toString()=="omarchy") return logo.animating()?15:2;
-        if(settings["layout"].toString()=="fx") return fx.animating()?15:2;
-        if(settings["layout"].toString()=="picture") return picture.animating()?15:2;
+        QString layout=settings["layout"].toString();
+        if(!ttfxFor.isEmpty()&&ttfxFor==layout) return ttfx.animating()?15:2;
+        if(layout=="omarchy") return logo.animating()?15:2;
+        if(layout=="fx") return fx.animating()?15:2;
+        if(layout=="picture") return picture.animating()?15:2;
         return 10;
     }
     // Reads a PNG/JPG/WebP (≤ 20 MB, ≤ 10000 px a side, Qt's 256 MB decode cap),
@@ -963,9 +969,21 @@ public:
         if(!active.isEmpty()) analyze();
         phase+=frameMs/1000.0;
         if(active.isEmpty()&&layout=="matrix") rain.step();
-        if(active.isEmpty()&&layout=="omarchy") logo.step(frameMs/1000.0);
-        if(active.isEmpty()&&layout=="fx") fx.step(frameMs/1000.0);
-        if(active.isEmpty()&&layout=="picture") picture.step(frameMs/1000.0);
+        // Omarchy, Omarchy FX and Picture FX use ttfx when the system has it:
+        // run an effect, hold the result, then the next one.
+        bool useTtfx=active.isEmpty()&&(layout=="omarchy"||layout=="fx"||layout=="picture")&&scenes::TtfxScene::available();
+        if(useTtfx) {
+            if(ttfxFor!=layout||!ttfx.started()||ttfx.step(frameMs/1000.0)) {
+                if(layout=="omarchy") logo.load(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/omarchy/branding/screensaver.txt");
+                int fps=settings["fps"].toInt(); ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:15);
+                ttfxFor=layout;
+            }
+        } else {
+            if(!ttfxFor.isEmpty()) { ttfx.stop(); ttfxFor.clear(); }
+            if(active.isEmpty()&&layout=="omarchy") logo.step(frameMs/1000.0);
+            if(active.isEmpty()&&layout=="fx") fx.step(frameMs/1000.0);
+            if(active.isEmpty()&&layout=="picture") picture.step(frameMs/1000.0);
+        }
         QImage image=render(settings["layout"].toString(),active);
         if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
         lastFrame=now;
@@ -1031,6 +1049,15 @@ int main(int argc,char **argv) {
         for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
         ok=ok&&!engine.render("fx","").isNull()&&engine.fx.lines.size()==3&&engine.fx.lines[0].startsWith("CPU");
+        // ttfx output: moves, save/restore and truecolor land in the grid; other
+        // sequences are ignored and nothing writes outside it.
+        {
+            scenes::TtfxScene grid; grid.prepare(6,2);
+            grid.feed(QByteArray("\x1b[?25l\x1b" "7AB\n\x1b[38;2;255;0;0mC\x1b[0mD\x1b" "8\x1b[1BXYZWVUTS\x1b[5A\x1b[99Cq"));
+            ok=ok&&grid.at(0,0)=='A'&&grid.at(0,1)=='B'&&grid.at(1,0)=='X'&&grid.at(1,5)=='U'&&grid.colorAt(1,0)==0;
+            grid.prepare(4,1); grid.feed(QByteArray("\x1b[38;2;10;20;30mZ")); ok=ok&&grid.at(0,0)=='Z'&&grid.colorAt(0,0)==(qRgb(10,20,30)|0xff000000);
+            grid.feed(QByteArray("\xe2\x96")); grid.feed(QByteArray("\x88")); ok=ok&&grid.at(0,1)==QChar(0x2588);
+        }
         // Picture FX: a picture becomes block art within 160×40; bad input is refused.
         {
             QImage photo(400,200,QImage::Format_RGB32); photo.fill(Qt::black);

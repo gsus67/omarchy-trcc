@@ -14,17 +14,19 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 - Automatic language from `LC_ALL`, `LC_MESSAGES` and `LANG`: English/Spanish,
   with English as the fallback for other languages. Panel, messages and native
   labels share one catalog; the text in your own themes is kept as is.
-- Home view with CPU/GPU/RAM temperature (when sensors exist), load, used memory
-  and a preview of the screen; refreshed every two seconds while the panel is
-  open.
-- Themes tab with a compact list and a single expandable preview; previewing a
-  theme does not apply it.
+- Home view with CPU/GPU/RAM temperature (when sensors exist), load, watts, used
+  memory and a preview of the screen; refreshed every two seconds while the
+  panel is open.
+- Themes tab with a compact list and a single expandable preview that follows
+  live values; previewing a theme does not apply it.
+- Power tab on desktops without a PSU sensor: estimates the rest of the PC
+  (board, RAM, drives, fans, cooling, RGB) and the PSU loss.
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
 - Four native layouts: **Focus, Terminal, Rings and Dots**. The screen also
   follows the system palette automatically.
-- CPU and GPU temperature/load, RAM usage, date and clock. A missing sensor is
-  shown as `—`.
+- CPU, GPU and RAM temperature with load and watts, CPU clock, VRAM and RAM in
+  use, total power, date and clock. A missing sensor is shown as `—`.
 - Software brightness, 0/90/180/270° rotation, metrics over the visuals and
   game mode (goes back to the metrics panel when CPU >75%).
 - Four built-in audio visuals: **Bars, Wave, Rings and Particles**, analyzed
@@ -77,6 +79,8 @@ divided by the PSU's efficiency (wall power); the tab lists each part's share. T
 modules' estimated watts. These are typical values (DDR5 4 W, DDR4 3 W, NVMe
 4 W, SATA SSD 2 W, HDD 6 W, fan 1.5 W, RGB fan 3 W, pump 5–7 W, RGB strip 4 W, board
 20–40 W), not measurements: no PC sensor reports them.
+
+![Power tab estimating the rest of the PC](preview-power.png)
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`
 themes, KarmaViz shaders or presets.

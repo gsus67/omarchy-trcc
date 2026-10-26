@@ -10,11 +10,12 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 - Botón **🖥 TR** en la barra; panel con los colores, fuentes, bordes y espaciado del tema activo de Omarchy.
 - Idioma automático según `LC_ALL`, `LC_MESSAGES` y `LANG`: inglés/español, con inglés como respaldo para otros idiomas. Panel, mensajes y etiquetas nativas comparten el catálogo; los textos de tus propios temas se conservan.
-- Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
-- Pestaña Temas con lista compacta y una sola vista previa desplegable; ver un tema no lo aplica.
+- Inicio con temperatura CPU/GPU/RAM (si hay sensores), carga, vatios, memoria usada y vista de la pantalla; actualización cada dos segundos mientras el panel está abierto.
+- Pestaña Temas con lista compacta y una sola vista previa desplegable que sigue los datos en vivo; ver un tema no lo aplica.
+- Pestaña Consumo en PCs de escritorio sin fuente con sensor: estima el resto del PC (placa, RAM, discos, ventiladores, refrigeración, RGB) y la pérdida de la fuente.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
 - Cuatro diseños nativos: **Focus, Terminal, Rings y Dots**. La pantalla también sigue automáticamente la paleta del sistema.
-- Temperatura/carga CPU y GPU, uso de RAM, fecha y reloj. Un sensor no disponible se muestra como `—`.
+- Temperatura de CPU, GPU y RAM con carga y vatios, frecuencia de la CPU, VRAM y RAM en uso, consumo total, fecha y reloj. Un sensor no disponible se muestra como `—`.
 - Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).
 - Cuatro visuales propios: **Bars, Wave, Rings y Particles**, analizados desde la salida de audio del sistema. No usa el micrófono ni guarda audio.
 - Seguimiento opcional del acento, activado inicialmente; cuando se desactiva se conserva un color fijo.
@@ -31,6 +32,8 @@ El consumo en vatios se lee sin root y sin cambiar permisos. Para el total de la
 Los diseños Focus, Terminal, Rings y Dots comparten un mismo diseño: la hora arriba con el consumo total y la fecha, y debajo CPU, GPU y RAM. Cada fila muestra la temperatura como valor y, a su lado, la carga y los vatios (RAM: uso). Sin sensor de RAM, la RAM muestra su uso. La línea de abajo muestra la frecuencia de la CPU (media de los núcleos / máxima), la VRAM de la GPU y la RAM en uso frente a sus totales.
 
 En un PC de escritorio sin fuente con sensor ni batería, el panel añade la pestaña **Consumo** para estimar el resto del PC. Detecta los módulos de RAM (sensores DDR4/DDR5), los NVMe y los discos SATA internos; tú marcas el tamaño de la placa base, los ventiladores sin RGB y con RGB (cada uno en uno solo), la refrigeración por aire o líquida, las tiras RGB y la certificación 80 PLUS de la fuente. Con "≈ Incluir en el total" activado, el total pasa a `≈ X W`: CPU + GPU más esas piezas, dividido entre la eficiencia de la fuente (consumo en el enchufe); la pestaña desglosa cuánto aporta cada pieza. La fila de RAM muestra siempre los vatios estimados de sus módulos. Son valores típicos (DDR5 4 W, DDR4 3 W, NVMe 4 W, SSD SATA 2 W, HDD 6 W, ventilador 1,5 W, con RGB 3 W, bomba 5–7 W, tira RGB 4 W, placa 20–40 W), no mediciones: ningún sensor del PC los da.
+
+![Pestaña Consumo estimando el resto del PC](preview-power.png)
 
 Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 

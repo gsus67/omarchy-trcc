@@ -390,7 +390,7 @@ Panel {
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
-            // What the built-in layouts show: tap to add or remove, up to 4 slots.
+            // What the built-in layouts show: tap to add or remove; the engine keeps catalog order.
             PanelSectionHeader { text: root.t("EN LOS DISEÑOS"); foreground: root.barForeground }
             Flow {
               id: fieldPicker
@@ -409,8 +409,8 @@ Panel {
                   readonly property bool chosen: fieldPicker.chosen.indexOf(modelData.id) >= 0
                   text: root.t(modelData.name)
                   selected: chosen
-                  // At least one slot stays; a fifth is not offered.
-                  enabled: !root.busy && (chosen ? fieldPicker.chosen.length > 1 : fieldPicker.chosen.length < 4)
+                  // At least one slot stays.
+                  enabled: !root.busy && (!chosen || fieldPicker.chosen.length > 1)
                   onClicked: {
                     var next = fieldPicker.chosen.filter(function (id) { return id !== modelData.id })
                     if (!chosen) next.push(modelData.id)
@@ -423,7 +423,7 @@ Panel {
               textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
-              text: root.t("Elige hasta 4 datos para los diseños Focus, Terminal, Rings y Dots.")
+              text: root.t("Elige qué datos muestran los diseños Focus, Terminal, Rings y Dots; con más de 4 se dibujan más pequeños.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }

@@ -61,9 +61,12 @@ as `≥ X W`. The panel shows the total on Home and each component's watts in it
 card; the Trofeo shows the total in the layouts' header, next to the date. CPU +
 GPU leaves out the board, RAM, drives and PSU losses.
 
-In **Display → In the layouts** you pick up to 4 readings for the Focus,
-Terminal, Rings and Dots layouts: CPU, GPU and RAM temperature, RAM use, time,
-total power, CPU power and GPU power.
+In **Display → In the layouts** you pick the readings for the Focus, Terminal,
+Rings and Dots layouts: CPU, GPU and RAM temperature, RAM use, time, total power,
+CPU power and GPU power. They always appear in that order; past 4 they are drawn
+smaller (two rows, or two columns in Terminal). Next to each value the Trofeo
+adds what no other slot shows yet: load and watts for CPU/GPU, used/total GiB
+for RAM, the weekday for the time and the source for the total power.
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`
 themes, KarmaViz shaders or presets.

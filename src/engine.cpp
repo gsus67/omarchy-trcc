@@ -813,7 +813,8 @@ public:
             // The time leads the header, with the PC total and the date beside it;
             // Clock shows the time large instead.
             // 12 h ("1:05 PM") is wider, so the total and date move left of it.
-            text(painter, {460,20,twelveHour() ? 510.0 : 620.0,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            double infoWidth = layout == "clock" ? 780.0 : twelveHour() ? 510.0 : 620.0;
+            text(painter, {460,20,infoWidth,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
             if (layout != "clock") text(painter, {990,12,250,62}, clockText(), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);

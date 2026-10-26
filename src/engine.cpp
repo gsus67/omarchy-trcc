@@ -812,7 +812,8 @@ public:
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
             // The time leads the header, with the PC total and the date beside it;
             // Clock shows the time large instead.
-            text(painter, {560,20,520,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
+            // 12 h ("1:05 PM") is wider, so the total and date move left of it.
+            text(painter, {460,20,twelveHour() ? 510.0 : 620.0,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
             if (layout != "clock") text(painter, {990,12,250,62}, clockText(), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);
@@ -840,7 +841,12 @@ public:
                 // The rows are the animated art itself (drawn above).
             } else if (layout == "clock") {
                 text(painter,{40,62,1200,220},clockText(false),190,palette.foreground,true,Qt::AlignCenter);
-                if (twelveHour()) text(painter,{1000,190,240,60},clockSuffix(),40,palette.muted,true,Qt::AlignLeft|Qt::AlignVCenter);
+                if (twelveHour()) {
+                    // AM/PM right after the digits, on their baseline side.
+                    QFont big(palette.font); big.setPixelSize(190); big.setBold(true);
+                    double right = 640 + QFontMetricsF(big).horizontalAdvance(clockText(false)) / 2;
+                    text(painter,{right+14,190,200,60},clockSuffix(),40,palette.muted,true,Qt::AlignLeft|Qt::AlignVCenter);
+                }
                 text(painter,{40,272,1200,40},QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(),24,palette.muted,false,Qt::AlignCenter);
                 for (int i=0;i<count;++i) {
                     double x = 40+i*1240.0/count;

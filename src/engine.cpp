@@ -40,9 +40,9 @@
 #include "themes.hpp"
 
 static constexpr int W = 1280, H = 480;
-static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy"};
+static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy", "fx"};
 // Layouts with a moving background: drawn at the chosen frame rate, like the visuals.
-static const QStringList animatedLayouts = {"matrix", "omarchy"};
+static const QStringList animatedLayouts = {"matrix", "omarchy", "fx"};
 // Frame rates offered for animations; 0 = auto (recommended), see Engine::frameRate().
 static const QList<int> frameRates = {0, 4, 8, 15, 30};
 static const QStringList visualIds = {"bars", "wave", "rings", "particles"};
@@ -484,6 +484,8 @@ public:
     double phase = 0;
     scenes::MatrixRain rain;
     scenes::LogoScene logo;
+    // Omarchy FX: the metric rows assembling with the screensaver effects.
+    scenes::LogoScene fx;
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
@@ -695,6 +697,16 @@ public:
                 painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,405,W,75), band);
             } else if (layout == "omarchy")
                 logo.draw(painter, {40,92,1200,240}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            else if (layout == "fx") {
+                // Fixed-width rows so columns line up while the effect assembles them.
+                QStringList rows;
+                for (const Field &field : data) {
+                    QStringList parts = field.detail.split(QString::fromUtf8("  ·  "));
+                    rows << QString("%1 %2 %3 %4").arg(field.label, -3).arg(field.value, 4).arg(parts.value(0), 4).arg(parts.value(1), 6);
+                }
+                fx.setText(rows);
+                fx.draw(painter, {140,108,1000,270}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            }
             text(painter, {38,20,800,50}, "TROFEO / " + palette.name.toUpper(), 24, palette.accent, true);
             // The time leads the header, with the PC total and the date beside it;
             // Clock shows the time large instead.
@@ -722,6 +734,8 @@ public:
                 QStringList parts;
                 for (const Field &field : data) parts << field.label + "  " + field.value + (field.detail.isEmpty() ? QString() : "  " + field.detail);
                 text(painter,{40,345,1200,50},parts.join(QString::fromUtf8("     ·     ")),22,palette.foreground,false,Qt::AlignCenter);
+            } else if (layout == "fx") {
+                // The rows are the animated art itself (drawn above).
             } else if (layout == "clock") {
                 text(painter,{40,62,1200,220},QTime::currentTime().toString("HH:mm"),190,palette.foreground,true,Qt::AlignCenter);
                 text(painter,{40,272,1200,40},QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(),24,palette.muted,false,Qt::AlignCenter);
@@ -787,7 +801,7 @@ public:
             else liveFile.cancelWriting();
         }
         QJsonArray themes, visuals;
-        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy"};
+        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy", "Omarchy FX"};
         for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
         for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
@@ -874,6 +888,7 @@ public:
         if(metrics.cpu>75) return 4;
         if(!visual().isEmpty()) return *std::max_element(levels.begin(),levels.end())<.02?4:15;
         if(settings["layout"].toString()=="omarchy") return logo.animating()?15:2;
+        if(settings["layout"].toString()=="fx") return fx.animating()?15:2;
         return 10;
     }
     void tick() {
@@ -912,6 +927,7 @@ public:
         phase+=frameMs/1000.0;
         if(active.isEmpty()&&layout=="matrix") rain.step();
         if(active.isEmpty()&&layout=="omarchy") logo.step(frameMs/1000.0);
+        if(active.isEmpty()&&layout=="fx") fx.step(frameMs/1000.0);
         QImage image=render(settings["layout"].toString(),active);
         if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
         lastFrame=now;
@@ -974,8 +990,9 @@ int main(int argc,char **argv) {
         ok=ok&&engine.command({{"command","status"},{"args",QJsonArray{"rings"}}})["ok"].toBool()&&QFileInfo::exists(engine.stateDir+"/previews/rings.png");
         ok=ok&&!engine.command({{"command","status"},{"args",QJsonArray{"../rings"}}})["ok"].toBool();
         // Animations move only when stepped; frame rates are a fixed menu.
-        for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); }
+        for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
+        ok=ok&&!engine.render("fx","").isNull()&&engine.fx.lines.size()==3&&engine.fx.lines[0].startsWith("CPU");
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
         engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
         engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;

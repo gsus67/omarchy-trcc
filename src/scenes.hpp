@@ -121,6 +121,8 @@ public:
         if (!next.isEmpty()) { lines = next.mid(0, 40); reroll(); }
     }
     void setSource(const QString &path) { source = path; load(path); }
+    // Live text (metrics) instead of a file: keeps the current effect running.
+    void setText(const QStringList &text) { if (!text.isEmpty()) lines = text; }
     void step(double seconds) {
         elapsed += seconds;
         if (elapsed < revealSeconds + holdSeconds) return;

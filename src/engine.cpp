@@ -178,15 +178,17 @@ public:
 // by any user (it is what nvidia-smi uses); it is loaded only when present.
 struct Nvml {
     struct Utilization { unsigned gpu, memory; };
+    struct Memory { unsigned long long total, free, used; };
     using Init = int (*)();
     using Count = int (*)(unsigned *);
     using Handle = int (*)(unsigned, void **);
     using Reading = int (*)(void *, unsigned *);
     using Temperature = int (*)(void *, int, unsigned *);
     using Busy = int (*)(void *, Utilization *);
+    using MemoryInfo = int (*)(void *, Memory *);
     QLibrary library;
     Init init = nullptr, shutdown = nullptr; Count count = nullptr; Handle handle = nullptr;
-    Reading power = nullptr; Temperature temperature = nullptr; Busy busy = nullptr;
+    Reading power = nullptr; Temperature temperature = nullptr; Busy busy = nullptr; MemoryInfo memory = nullptr;
     bool tried = false;
     bool load(const QString &path) {
         if (tried) return init;
@@ -199,14 +201,18 @@ struct Nvml {
         power = reinterpret_cast<Reading>(library.resolve("nvmlDeviceGetPowerUsage"));
         temperature = reinterpret_cast<Temperature>(library.resolve("nvmlDeviceGetTemperature"));
         busy = reinterpret_cast<Busy>(library.resolve("nvmlDeviceGetUtilizationRates"));
+        memory = reinterpret_cast<MemoryInfo>(library.resolve("nvmlDeviceGetMemoryInfo"));
         if (!init || !shutdown || !count || !handle || !power) init = nullptr;
         return init;
     }
 };
 
 struct Metrics {
-    struct Gpu { double watts = -1, temp = -1, busy = -1; };
+    struct Gpu { double watts = -1, temp = -1, busy = -1, vramUsedGiB = -1, vramTotalGiB = -1; };
     double cpu = 0, gpu = -1, cpuTemp = -1, gpuTemp = -1, ramTemp = -1, ram = 0, ramUsedGiB = 0, ramTotalGiB = 0;
+    // Average core clock against the fastest core's top, and the busiest GPU's
+    // video memory; -1 = not reported.
+    double cpuGHz = -1, cpuMaxGHz = -1, vramUsedGiB = -1, vramTotalGiB = -1;
     // Watts; -1 = no sensor. powerSource: "psu", "battery", "components" or "".
     double cpuPower = -1, gpuPower = -1, power = -1;
     QString powerSource; bool powerPartial = false;
@@ -264,6 +270,8 @@ struct Metrics {
             if (nvml.power(device, &milliwatts) == 0) reading.watts = milliwatts / 1000.0;
             if (nvml.temperature && nvml.temperature(device, 0, &celsius) == 0) reading.temp = celsius;
             if (nvml.busy && nvml.busy(device, &use) == 0) reading.busy = use.gpu;
+            Nvml::Memory vram{0, 0, 0};
+            if (nvml.memory && nvml.memory(device, &vram) == 0 && vram.total > 0) { reading.vramUsedGiB = vram.used / 1073741824.0; reading.vramTotalGiB = vram.total / 1073741824.0; }
             nvidia << reading;
         }
         // Closing the session releases the device so it can power down.
@@ -282,6 +290,15 @@ struct Metrics {
         double t = memTotal.match(memory).captured(1).toDouble(), a = available.match(memory).captured(1).toDouble();
         ram = t > 0 ? (t-a)*100/t : 0;
         ramTotalGiB=t/1048576.0; ramUsedGiB=(t-a)/1048576.0;
+        double clockSum = 0; int clocks = 0; cpuMaxGHz = -1;
+        QString cpuDir = sysRoot + "/devices/system/cpu";
+        for (const QString &core : QDir(cpuDir).entryList({"cpu[0-9]*"}, QDir::Dirs)) {
+            bool read = false; double khz = readText(cpuDir + "/" + core + "/cpufreq/scaling_cur_freq").toDouble(&read);
+            if (read && khz > 0) { clockSum += khz; ++clocks; }
+            cpuMaxGHz = std::max(cpuMaxGHz, readText(cpuDir + "/" + core + "/cpufreq/cpuinfo_max_freq").toDouble() / 1e6);
+        }
+        cpuGHz = clocks ? clockSum / clocks / 1e6 : -1;
+        if (cpuMaxGHz <= 0) cpuMaxGHz = -1;
         cpuTemp = -1; ramTemp = -1;
         double psuPower = -1;
         QList<Gpu> gpus;
@@ -304,6 +321,11 @@ struct Metrics {
                 }
                 QString busy = readText(path + "/device/gpu_busy_percent");
                 if (!busy.isEmpty()) reading.busy = busy.toDouble();
+                QString vramTotal = readText(path + "/device/mem_info_vram_total");
+                if (vramTotal.toDouble() > 0) {
+                    reading.vramTotalGiB = vramTotal.toDouble() / 1073741824.0;
+                    reading.vramUsedGiB = readText(path + "/device/mem_info_vram_used").toDouble() / 1073741824.0;
+                }
                 gpus << reading;
             }
             // Corsair HXi/RMi report the real delivered power over USB.
@@ -322,7 +344,8 @@ struct Metrics {
             if (reading.watts >= 0) gpuPower = std::max(0.0, gpuPower) + reading.watts;
             if (!busiest || reading.watts > busiest->watts) busiest = &reading;
         }
-        if (busiest) { gpuTemp = busiest->temp; gpu = busiest->busy; }
+        if (busiest) { gpuTemp = busiest->temp; gpu = busiest->busy; vramUsedGiB = busiest->vramUsedGiB; vramTotalGiB = busiest->vramTotalGiB; }
+        else { vramUsedGiB = -1; vramTotalGiB = -1; }
         if (gpu < 0)
             for (const QString &card : QDir(sysRoot + "/class/drm").entryList({"card*"}, QDir::Dirs)) {
                 QString value = readText(sysRoot + "/class/drm/" + card + "/device/gpu_busy_percent");
@@ -465,19 +488,29 @@ public:
         p.setFont(font); p.setPen(color); p.drawText(rect, alignment, value);
     }
     // The rows every built-in layout shows: temperature as the value, then
-    // load and watts (RAM: use and GiB in use). ring = load for the rings layout.
+    // load and watts (RAM: use; its GiB are in the footer). ring = load for rings.
     struct Field { QString label, value, detail; double ring; };
     QList<Field> fieldData() const {
         auto percent = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + "%"; };
         auto watts = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + " W"; };
         auto join = [](QStringList parts) { parts.removeAll(QString()); return parts.join(QString::fromUtf8("  ·  ")); };
-        QString ramUsed = metrics.ramTotalGiB <= 0 ? QString() : QString("%1 GiB").arg(metrics.ramUsedGiB,0,'f',1);
         // Without a RAM sensor its use takes the value slot.
         bool ramSensor = metrics.ramTemp >= 0;
         return {
             {"CPU", temperature(metrics.cpuTemp), join({percent(metrics.cpu), watts(metrics.cpuPower)}), metrics.cpu},
             {"GPU", temperature(metrics.gpuTemp), join({percent(metrics.gpu), watts(metrics.gpuPower)}), std::max(0., metrics.gpu)},
-            {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram), join({ramSensor ? percent(metrics.ram) : QString(), ramUsed}), metrics.ram}};
+            {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram), ramSensor ? percent(metrics.ram) : QString(), metrics.ram}};
+    }
+    // Clock and memory in one line: "CPU 3.4 / 4.4 GHz", "GPU 1.0 / 16.0 GiB",
+    // "RAM 4.1 / 31.2 GiB"; missing readings are left out.
+    QStringList summary() const {
+        auto pair = [](const QString &name, double used, double total, const QString &unit) {
+            return used < 0 || total <= 0 ? QString() : QString("%1 %2 / %3 %4").arg(name).arg(used,0,'f',1).arg(total,0,'f',1).arg(unit);
+        };
+        QStringList parts = {pair("CPU", metrics.cpuGHz, metrics.cpuMaxGHz, "GHz"), pair("GPU", metrics.vramUsedGiB, metrics.vramTotalGiB, "GiB"),
+                             pair("RAM", metrics.ramUsedGiB, metrics.ramTotalGiB, "GiB")};
+        parts.removeAll(QString());
+        return parts;
     }
     // Total watts and date for the header, next to the time.
     QString headerInfo() const {
@@ -537,6 +570,8 @@ public:
                 text(painter, {30,y+45,420,140}, data[i].value, 92, palette.foreground, true);
                 text(painter, {30,y+190,420,40}, data[i].detail, 20, palette.muted);
             }
+            const QStringList lines = summary();
+            for (int i = 0; i < lines.size(); ++i) text(painter, {30,1130.+i*36,420,34}, lines[i], 20, palette.muted);
         } else if (!audioVisual.isEmpty()) {
             QColor accent = settings["followAccent"].toBool() ? palette.accent : QColor::fromHsv(settings["visualHue"].toInt(), 170, 240);
             double power = *std::max_element(levels.begin(), levels.end());
@@ -609,7 +644,9 @@ public:
                 if (layout != "rings") { painter.setPen(QPen(palette.accent,3)); painter.drawLine(QPointF(x,330),QPointF(x+260,330)); }
             }
             QString version = pluginVersion();
-            text(painter,{40,420,1200,38},"OMARCHY TROFEO  ·  NATIVE USB"+(version.isEmpty()?QString():"  ·  v"+version),16,palette.muted);
+            // Footer: clocks and memory together, the plugin version on the right.
+            text(painter,{40,415,1000,45},summary().join(QString::fromUtf8("   ·   ")),20,palette.foreground);
+            if(!version.isEmpty()) text(painter,{1040,415,200,45},"v"+version,16,palette.muted,false,Qt::AlignRight|Qt::AlignVCenter);
         }
         if (!preview && settings["brightness"].toInt()<100)
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));
@@ -638,7 +675,7 @@ public:
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
-            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial}}}};
+            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuGHz",metrics.cpuGHz},{"cpuMaxGHz",metrics.cpuMaxGHz},{"vramUsedGiB",metrics.vramUsedGiB},{"vramTotalGiB",metrics.vramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial}}}};
     }
     QJsonObject command(const QJsonObject &request) {
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
@@ -802,7 +839,12 @@ int main(int argc,char **argv) {
         put("class/hwmon/hwmon1/temp1_input","60000"); put("class/hwmon/hwmon1/device/gpu_busy_percent","80");
         put("class/hwmon/hwmon2/name","amdgpu"); put("class/hwmon/hwmon2/power1_input","5000000");
         put("class/hwmon/hwmon2/temp1_input","40000"); put("class/hwmon/hwmon2/device/gpu_busy_percent","3");
+        put("class/hwmon/hwmon1/device/mem_info_vram_total","17179869184"); put("class/hwmon/hwmon1/device/mem_info_vram_used","1073741824");
+        put("devices/system/cpu/cpu0/cpufreq/scaling_cur_freq","3000000"); put("devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq","4400000");
+        put("devices/system/cpu/cpu1/cpufreq/scaling_cur_freq","1000000"); put("devices/system/cpu/cpu1/cpufreq/cpuinfo_max_freq","3300000");
         m.sample(1000);
+        // Clock: average of the cores against the fastest top; VRAM of the busiest GPU.
+        ok=ok&&qFuzzyCompare(m.cpuGHz,2.0)&&qFuzzyCompare(m.cpuMaxGHz,4.4)&&qFuzzyCompare(m.vramUsedGiB,1.0)&&qFuzzyCompare(m.vramTotalGiB,16.0);
         // Coretemp has no power: GPU-only total is a lower bound. Both GPUs add up;
         // temperature and load follow the busiest one.
         ok=ok&&m.cpuPower<0&&qFuzzyCompare(m.gpuPower,50.0)&&m.gpuTemp==60&&m.gpu==80&&m.powerPartial&&m.powerText()==QString::fromUtf8("≥50");
@@ -832,7 +874,7 @@ int main(int argc,char **argv) {
             QFile::link(fakeSys.path()+"/bus/drivers/nvidia",fakeSys.path()+"/bus/pci/devices/0000:01:00.0/driver");
             m.nvmlLibrary=fakeNvml; m.sample(6000);
             // 120 W NVIDIA becomes the busiest card: its temperature and load win.
-            ok=ok&&qFuzzyCompare(m.gpuPower,170.0)&&m.gpuTemp==65&&m.gpu==90;
+            ok=ok&&qFuzzyCompare(m.gpuPower,170.0)&&m.gpuTemp==65&&m.gpu==90&&qFuzzyCompare(m.vramTotalGiB,8.0)&&qFuzzyCompare(m.vramUsedGiB,2.0);
             // A sleeping laptop GPU is not woken up and counts as 0 W.
             put("bus/pci/devices/0000:01:00.0/power/control","auto"); put("bus/pci/devices/0000:01:00.0/power/runtime_status","suspended");
             auto sessions=reinterpret_cast<int(*)()>(QLibrary(fakeNvml).resolve("fakeNvmlSessions"));

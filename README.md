@@ -63,8 +63,10 @@ GPU leaves out the board, RAM, drives and PSU losses.
 
 The Focus, Terminal, Rings and Dots layouts share one design: the time on top
 with the PC total and the date, then CPU, GPU and RAM. Each row shows the
-temperature as its value and, beside it, load and watts (RAM: use and GiB
-in use). Without a RAM sensor, RAM shows its use instead.
+temperature as its value and, beside it, load and watts (RAM: use). Without a
+RAM sensor, RAM shows its use instead. The bottom line shows the CPU clock
+(average of the cores / top), the GPU's VRAM and the RAM in use against their
+totals.
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`
 themes, KarmaViz shaders or presets.

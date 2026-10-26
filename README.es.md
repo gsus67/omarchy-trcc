@@ -6,6 +6,38 @@ Plugin de Omarchy para la **Thermalright Trofeo Vision 1280×480**. Motor USB pr
 
 ![Panel actual de omarchy-trcc con datos en vivo](preview.png)
 
+## Galería
+
+Las pestañas del panel (Inicio está arriba; Consumo, en [Compatibilidad](#compatibilidad)):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/panel-display.png" alt="Pantalla" width="260"></td>
+    <td><img src="assets/gallery/panel-themes.png" alt="Temas" width="260"></td>
+    <td><img src="assets/gallery/panel-visuals.png" alt="Visuales" width="260"></td>
+  </tr>
+  <tr>
+    <td align="center">Pantalla</td>
+    <td align="center">Temas</td>
+    <td align="center">Visuales</td>
+  </tr>
+</table>
+
+Los cuatro diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/lcd-focus.png" alt="Focus" width="400"></td>
+    <td><img src="assets/gallery/lcd-terminal.png" alt="Terminal" width="400"></td>
+  </tr>
+  <tr><td align="center">Focus</td><td align="center">Terminal</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-rings.png" alt="Rings" width="400"></td>
+    <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
+  </tr>
+  <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+</table>
+
 ## Funciones
 
 - Botón **🖥 TR** en la barra; panel con los colores, fuentes, bordes y espaciado del tema activo de Omarchy.
@@ -33,7 +65,7 @@ Los diseños Focus, Terminal, Rings y Dots comparten un mismo diseño: la hora a
 
 En un PC de escritorio sin fuente con sensor ni batería, el panel añade la pestaña **Consumo** para estimar el resto del PC. Detecta los módulos de RAM (sensores DDR4/DDR5), los NVMe y los discos SATA internos; tú marcas el tamaño de la placa base, los ventiladores sin RGB y con RGB (cada uno en uno solo), la refrigeración por aire o líquida, las tiras RGB y la certificación 80 PLUS de la fuente. Con "≈ Incluir en el total" activado, el total pasa a `≈ X W`: CPU + GPU más esas piezas, dividido entre la eficiencia de la fuente (consumo en el enchufe); la pestaña desglosa cuánto aporta cada pieza. La fila de RAM muestra siempre los vatios estimados de sus módulos. Son valores típicos (DDR5 4 W, DDR4 3 W, NVMe 4 W, SSD SATA 2 W, HDD 6 W, ventilador 1,5 W, con RGB 3 W, bomba 5–7 W, tira RGB 4 W, placa 20–40 W), no mediciones: ningún sensor del PC los da.
 
-![Pestaña Consumo estimando el resto del PC](preview-power.png)
+![Pestaña Consumo estimando el resto del PC](assets/gallery/panel-power.png)
 
 Esta versión dibuja diseños y visuales propios; no importa temas `.dc`, shaders KarmaViz ni presets de TRCC.
 

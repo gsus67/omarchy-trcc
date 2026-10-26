@@ -7,6 +7,38 @@ C++/Qt USB engine: **TRCC does not need to be installed or run**.
 
 ![Current omarchy-trcc panel with live data](preview.png)
 
+## Gallery
+
+The panel tabs (Home is shown above; Power is under [Compatibility](#compatibility)):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/panel-display.png" alt="Display" width="260"></td>
+    <td><img src="assets/gallery/panel-themes.png" alt="Themes" width="260"></td>
+    <td><img src="assets/gallery/panel-visuals.png" alt="Visuals" width="260"></td>
+  </tr>
+  <tr>
+    <td align="center">Display</td>
+    <td align="center">Themes</td>
+    <td align="center">Visuals</td>
+  </tr>
+</table>
+
+The four built-in layouts as the Trofeo shows them (1280×480, here at half size):
+
+<table>
+  <tr>
+    <td><img src="assets/gallery/lcd-focus.png" alt="Focus" width="400"></td>
+    <td><img src="assets/gallery/lcd-terminal.png" alt="Terminal" width="400"></td>
+  </tr>
+  <tr><td align="center">Focus</td><td align="center">Terminal</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-rings.png" alt="Rings" width="400"></td>
+    <td><img src="assets/gallery/lcd-dots.png" alt="Dots" width="400"></td>
+  </tr>
+  <tr><td align="center">Rings</td><td align="center">Dots</td></tr>
+</table>
+
 ## Features
 
 - **🖥 TR** button in the bar; panel with the colors, fonts, borders and spacing
@@ -80,7 +112,7 @@ modules' estimated watts. These are typical values (DDR5 4 W, DDR4 3 W, NVMe
 4 W, SATA SSD 2 W, HDD 6 W, fan 1.5 W, RGB fan 3 W, pump 5–7 W, RGB strip 4 W, board
 20–40 W), not measurements: no PC sensor reports them.
 
-![Power tab estimating the rest of the PC](preview-power.png)
+![Power tab estimating the rest of the PC](assets/gallery/panel-power.png)
 
 This version draws its own layouts and visuals; it does not import TRCC `.dc`
 themes, KarmaViz shaders or presets.

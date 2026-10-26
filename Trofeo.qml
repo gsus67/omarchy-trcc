@@ -130,7 +130,8 @@ Panel {
 
   Process {
     id: statusProc
-    command: ["python3", root.backend, "--device", root.device, "status"]
+    // With a theme open in Temas, the engine redraws its preview each refresh.
+    command: ["python3", root.backend, "--device", root.device, "status"].concat(root.page === "themes" && root.expandedTheme !== "" ? [root.expandedTheme] : [])
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.statusOutput = text }
     stderr: StdioCollector { waitForEnd: true; onStreamFinished: root.statusError = text }
     onExited: function(code) {
@@ -616,7 +617,8 @@ Panel {
                 width: parent.width
                 height: width * 480 / 1280
                 source: root.themeInfo().preview ? root.themeInfo().preview + "?palette="
-                  + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "") : ""
+                  + encodeURIComponent(root.deviceData.palette ? root.deviceData.palette.name + root.deviceData.palette.accent : "")
+                  + "&frame=" + root.deviceData.previewRevision : ""
                 cache: false
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true

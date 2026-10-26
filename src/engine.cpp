@@ -715,9 +715,11 @@ public:
             painter.fillRect(image.rect(),QColor(0,0,0,qRound(255*(1-settings["brightness"].toInt()/100.0))));
         return image;
     }
+    // id must be a built-in layout or a stored custom theme (callers check).
+    void preview(const QString &id) { render(id, "", true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+id+".png"); }
     void previews() {
-        for (const QString &layout : layouts) render(layout, "", true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+layout+".png");
-        for(const auto &theme:customThemes.all()) render(theme.id,"",true).scaled(640,240,Qt::IgnoreAspectRatio,Qt::SmoothTransformation).save(stateDir+"/previews/"+theme.id+".png");
+        for (const QString &layout : layouts) preview(layout);
+        for(const auto &theme:customThemes.all()) preview(theme.id);
     }
     QJsonObject status() {
         QSaveFile liveFile(stateDir+"/live.png");
@@ -745,8 +747,13 @@ public:
     QJsonObject command(const QJsonObject &request) {
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
         QString value=args.isEmpty()?QString():args[0].toString();
-        if(op=="status") return status();
         auto invalid=[] { return QJsonObject{{"ok",false},{"message",uiText("Acción o valor no válido")}}; };
+        // status <theme>: also redraw that theme's preview, so the one open in
+        // the panel shows live values like the LCD.
+        if(op=="status") {
+            if(!value.isEmpty()) { if(!layouts.contains(value)&&!customThemes.contains(value)) return invalid(); preview(value); }
+            return status();
+        }
         if(op=="import-theme"&&args.size()==1) {
             auto result=customThemes.importFile(value);
             if(result["ok"].toBool()) previews();
@@ -878,6 +885,8 @@ int main(int argc,char **argv) {
         ok=paletteFile.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok; paletteFile.write("accent = \"#abcdef\"\nbackground = \"#111111\"\n"); paletteFile.close();
         engine.palette.load();
         ok=ok&&engine.palette.accent.name()=="#abcdef"&&engine.palette.background.name()=="#111111";
+        ok=ok&&engine.command({{"command","status"},{"args",QJsonArray{"rings"}}})["ok"].toBool()&&QFileInfo::exists(engine.stateDir+"/previews/rings.png");
+        ok=ok&&!engine.command({{"command","status"},{"args",QJsonArray{"../rings"}}})["ok"].toBool();
         // Fixed rows: CPU, GPU and RAM in every layout and orientation.
         ok=ok&&engine.fieldData().size()==3;
         ok=ok&&!engine.command({{"command","fields"},{"args",QJsonArray{"cpu"}}})["ok"].toBool();

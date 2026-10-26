@@ -41,20 +41,25 @@ checks the panel identity on connect and rejects other geometries. It is not
 compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
 shares the USB ID.
 
-Temperatures come from hwmon (`coretemp`, `k10temp`, `zenpower`, `amdgpu`,
-`nouveau`), CPU/RAM load from `/proc` and GPU load from the DRM
+Temperatures come from hwmon (`coretemp`, `k10temp`, `amdgpu`, `nouveau`,
+`i915`, `xe`), CPU/RAM load from `/proc` and GPU load from the DRM
 `gpu_busy_percent` node. RAM temperature comes from `spd5118`/`jc42` sensors and
-shows the highest available value. Power draw in watts is read without root.
-The PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon
-`corsairpsu`), a laptop battery while discharging, or CPU + GPU. GPU power
-comes from `amdgpu`/`nouveau` (all GPUs are added). CPU power comes from the
-RAPL counter or the `zenpower` module (cores + SoC; not shipped with Omarchy),
-only when the system already lets users read them. The kernel keeps RAPL
-root-only for security and the plugin never changes permissions, so the CPU
-usually shows `—` and the total shows as `≥ X W`. CPU + GPU leaves out the board, drives and PSU
-losses. Proprietary NVIDIA telemetry is not included yet. This version draws
-its own layouts and visuals; it does not import TRCC `.dc` themes, KarmaViz
-shaders or presets.
+shows the highest available value. With NVIDIA's proprietary driver, GPU power,
+temperature and load come from NVML, the library Omarchy installs with
+`nvidia-utils` (the one `nvidia-smi` uses).
+
+Power draw in watts is read without root and without changing permissions. The
+PC total comes, in order, from a USB Corsair HXi/RMi PSU (hwmon `corsairpsu`), a
+laptop battery while discharging, or CPU + GPU. GPU power comes from
+`amdgpu`/`nouveau`, the energy counter of Intel discrete GPUs (`i915`/`xe`) or
+NVML; all GPUs are added. A sleeping NVIDIA laptop GPU counts as 0 W and is not
+woken up. CPU power comes from the RAPL counter only when the system already
+lets users read it; Omarchy keeps it root-only for security, so the CPU usually
+shows `—` and the total shows as `≥ X W`. CPU + GPU leaves out the board, RAM,
+drives and PSU losses.
+
+This version draws its own layouts and visuals; it does not import TRCC `.dc`
+themes, KarmaViz shaders or presets.
 
 ## Requirements
 

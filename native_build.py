@@ -79,6 +79,9 @@ def build(source, output, *, tools=None, tests=False):
         theme_test = output / "themes-test"
         run(*common, str(source / "tests/themes_test.cpp"), str(source / "src/themes.cpp"),
             str(resources), *flags, "-o", str(theme_test))
+        fake_nvml = output / "libfake-nvml.so"
+        run(*common, "-shared", str(source / "tests/fake_nvml.cpp"), "-o", str(fake_nvml))
+        os.environ["TROFEO_TEST_NVML"] = str(fake_nvml)
         print(run(str(binary), "--self-test"), end="")
         print(run(str(theme_test)), end="")
     return binary

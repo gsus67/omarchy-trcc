@@ -10,9 +10,11 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QImage>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLibrary>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
@@ -165,38 +167,102 @@ public:
     }
 };
 
+// NVIDIA's proprietary driver has no hwmon power node. NVML ships with the
+// nvidia-utils package that Omarchy installs for NVIDIA GPUs and is readable
+// by any user (it is what nvidia-smi uses); it is loaded only when present.
+struct Nvml {
+    struct Utilization { unsigned gpu, memory; };
+    using Init = int (*)();
+    using Count = int (*)(unsigned *);
+    using Handle = int (*)(unsigned, void **);
+    using Reading = int (*)(void *, unsigned *);
+    using Temperature = int (*)(void *, int, unsigned *);
+    using Busy = int (*)(void *, Utilization *);
+    QLibrary library;
+    Init init = nullptr, shutdown = nullptr; Count count = nullptr; Handle handle = nullptr;
+    Reading power = nullptr; Temperature temperature = nullptr; Busy busy = nullptr;
+    bool tried = false;
+    bool load(const QString &path) {
+        if (tried) return init;
+        tried = true; library.setFileName(path);
+        if (!library.load()) return false;
+        init = reinterpret_cast<Init>(library.resolve("nvmlInit_v2"));
+        shutdown = reinterpret_cast<Init>(library.resolve("nvmlShutdown"));
+        count = reinterpret_cast<Count>(library.resolve("nvmlDeviceGetCount_v2"));
+        handle = reinterpret_cast<Handle>(library.resolve("nvmlDeviceGetHandleByIndex_v2"));
+        power = reinterpret_cast<Reading>(library.resolve("nvmlDeviceGetPowerUsage"));
+        temperature = reinterpret_cast<Temperature>(library.resolve("nvmlDeviceGetTemperature"));
+        busy = reinterpret_cast<Busy>(library.resolve("nvmlDeviceGetUtilizationRates"));
+        if (!init || !shutdown || !count || !handle || !power) init = nullptr;
+        return init;
+    }
+};
+
 struct Metrics {
+    struct Gpu { double watts = -1, temp = -1, busy = -1; };
     double cpu = 0, gpu = -1, cpuTemp = -1, gpuTemp = -1, ramTemp = -1, ram = 0, ramUsedGiB = 0, ramTotalGiB = 0;
     // Watts; -1 = no sensor. powerSource: "psu", "battery", "components" or "".
     double cpuPower = -1, gpuPower = -1, power = -1;
     QString powerSource; bool powerPartial = false;
-    QString sysRoot = "/sys", procRoot = "/proc";
+    QString sysRoot = "/sys", procRoot = "/proc", nvmlLibrary = "libnvidia-ml.so.1";
     quint64 previousTotal = 0, previousIdle = 0;
-    qint64 previousEnergy = -1, previousEnergyAt = 0;
+    // Energy counters (µJ) by path, to turn them into watts between samples.
+    QHash<QString, QPair<qint64, qint64>> energy;
+    Nvml nvml; QList<Gpu> nvidia; qint64 nvidiaAt = 0;
     // hwmon powerN_* values are in microwatts; amdgpu exposes power1_average
     // on older GPUs and power1_input on newer ones.
-    static double hwmonPower(const QString &path, int index = 1) {
-        for (const QString &kind : {"_average", "_input"}) {
-            QString value = readText(path + "/power" + QString::number(index) + kind);
+    static double hwmonPower(const QString &path) {
+        for (const QString &kind : {"/power1_average", "/power1_input"}) {
+            QString value = readText(path + kind);
             if (!value.isEmpty()) return value.toDouble() / 1e6;
         }
         return -1;
     }
-    // Package power from the RAPL energy counter. The kernel keeps energy_uj
-    // root-only by default, so this only works where it was made readable.
-    double raplPower(qint64 nowMs) {
-        QString base = sysRoot + "/class/powercap/intel-rapl:0";
-        QString value = readText(base + "/energy_uj");
-        if (value.isEmpty()) { previousEnergy = -1; return -1; }
-        qint64 energy = value.toLongLong(), range = readText(base + "/max_energy_range_uj").toLongLong();
-        double watts = -1;
-        if (previousEnergy >= 0 && nowMs > previousEnergyAt) {
-            qint64 delta = energy - previousEnergy;
+    double energyPower(const QString &file, qint64 nowMs, qint64 range = 0) {
+        QString value = readText(file);
+        if (value.isEmpty()) { energy.remove(file); return -1; }
+        qint64 microjoules = value.toLongLong(); double watts = -1;
+        if (energy.contains(file) && nowMs > energy[file].second) {
+            qint64 delta = microjoules - energy[file].first;
             if (delta < 0 && range > 0) delta += range;
-            if (delta >= 0) watts = delta / 1000.0 / double(nowMs - previousEnergyAt);
+            if (delta >= 0) watts = delta / 1000.0 / double(nowMs - energy[file].second);
         }
-        previousEnergy = energy; previousEnergyAt = nowMs;
+        energy[file] = {microjoules, nowMs};
         return watts;
+    }
+    QList<Gpu> nvidiaGpus(qint64 nowMs) {
+        // Only for a GPU bound to the proprietary driver; nouveau uses hwmon.
+        QString pci = sysRoot + "/bus/pci/devices";
+        bool present = false, autosuspend = false, asleep = false;
+        for (const QString &device : QDir(pci).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QString path = pci + "/" + device;
+            if (readText(path + "/vendor") != "0x10de" || !readText(path + "/class").startsWith("0x03")) continue;
+            if (QFileInfo(QFileInfo(path + "/driver").symLinkTarget()).fileName() != "nvidia") continue;
+            present = true;
+            if (readText(path + "/power/control") == "auto") autosuspend = true;
+            if (readText(path + "/power/runtime_status") == "suspended") asleep = true;
+        }
+        if (!present) return {};
+        // A sleeping laptop GPU draws ~0 W; querying it would wake it, so
+        // report 0 and leave it asleep. With runtime power management, read
+        // every 10 s so polling never keeps the GPU awake.
+        if (asleep) { nvidia = {Gpu{0, -1, 0}}; nvidiaAt = nowMs; return nvidia; }
+        if (autosuspend && nowMs - nvidiaAt < 10000 && !nvidia.isEmpty()) return nvidia;
+        nvidiaAt = nowMs; nvidia.clear();
+        if (!nvml.load(nvmlLibrary) || nvml.init() != 0) return {};
+        unsigned total = 0; nvml.count(&total);
+        for (unsigned i = 0; i < total; ++i) {
+            void *device = nullptr; unsigned milliwatts = 0, celsius = 0; Nvml::Utilization use{0, 0};
+            if (nvml.handle(i, &device) != 0) continue;
+            Gpu reading;
+            if (nvml.power(device, &milliwatts) == 0) reading.watts = milliwatts / 1000.0;
+            if (nvml.temperature && nvml.temperature(device, 0, &celsius) == 0) reading.temp = celsius;
+            if (nvml.busy && nvml.busy(device, &use) == 0) reading.busy = use.gpu;
+            nvidia << reading;
+        }
+        // Closing the session releases the device so it can power down.
+        nvml.shutdown();
+        return nvidia;
     }
     void sample(qint64 nowMs = QDateTime::currentMSecsSinceEpoch()) {
         auto fields = readText(procRoot + "/stat").section('\n', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
@@ -210,31 +276,29 @@ struct Metrics {
         double t = memTotal.match(memory).captured(1).toDouble(), a = available.match(memory).captured(1).toDouble();
         ram = t > 0 ? (t-a)*100/t : 0;
         ramTotalGiB=t/1048576.0; ramUsedGiB=(t-a)/1048576.0;
-        cpuTemp = -1; gpuTemp = -1; ramTemp = -1; gpu = -1; gpuPower = -1; cpuPower = -1;
-        // -2 = no GPU seen yet, so a GPU without a power sensor still reports.
-        double psuPower = -1, busiestGpu = -2;
+        cpuTemp = -1; ramTemp = -1;
+        double psuPower = -1;
+        QList<Gpu> gpus;
         QString hwmonDir = sysRoot + "/class/hwmon";
         for (const QString &name : QDir(hwmonDir).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
             QString path = hwmonDir + "/" + name;
             QString driver = readText(path + "/name");
-            if (driver == "coretemp" || driver == "k10temp" || driver == "zenpower") {
+            if (driver == "coretemp" || driver == "k10temp") {
                 double temp = readText(path + "/temp1_input").toDouble() / 1000;
                 if (temp > 0) cpuTemp = std::max(cpuTemp, temp);
-                // zenpower: power1 = cores, power2 = SoC.
-                if (driver == "zenpower" && cpuPower < 0)
-                    for (int i = 1; i <= 2; ++i) if (double w = hwmonPower(path, i); w >= 0) cpuPower = std::max(0.0, cpuPower) + w;
             }
-            if (driver == "amdgpu" || driver == "nouveau") {
-                // Every GPU counts towards the total; temperature and load come
-                // from the one drawing the most, so they describe the same card.
-                double watts = hwmonPower(path);
-                if (watts >= 0) gpuPower = std::max(0.0, gpuPower) + watts;
-                if (busiestGpu == -2 || watts > busiestGpu) {
-                    busiestGpu = watts;
-                    QString temp = readText(path + "/temp1_input"), busy = readText(path + "/device/gpu_busy_percent");
-                    gpuTemp = temp.isEmpty() ? -1 : temp.toDouble() / 1000;
-                    gpu = busy.isEmpty() ? -1 : busy.toDouble();
+            if (driver == "amdgpu" || driver == "nouveau" || driver == "i915" || driver == "xe") {
+                Gpu reading;
+                reading.watts = hwmonPower(path);
+                // Intel discrete GPUs publish an energy counter instead of power.
+                if (reading.watts < 0 && (driver == "i915" || driver == "xe")) reading.watts = energyPower(path + "/energy1_input", nowMs);
+                for (const QString &file : {"/temp1_input", "/temp2_input"}) {
+                    QString value = readText(path + file);
+                    if (!value.isEmpty()) { reading.temp = value.toDouble() / 1000; break; }
                 }
+                QString busy = readText(path + "/device/gpu_busy_percent");
+                if (!busy.isEmpty()) reading.busy = busy.toDouble();
+                gpus << reading;
             }
             // Corsair HXi/RMi report the real delivered power over USB.
             if (driver == "corsairpsu" && psuPower < 0) psuPower = hwmonPower(path);
@@ -243,13 +307,25 @@ struct Metrics {
                 if(!value.isEmpty()) ramTemp=std::max(ramTemp,value.toDouble()/1000.0);
             }
         }
+        gpus << nvidiaGpus(nowMs);
+        // Every GPU counts towards the total; temperature and load come from
+        // the one drawing the most, so they describe the same card.
+        gpuPower = -1; gpuTemp = -1; gpu = -1;
+        const Gpu *busiest = nullptr;
+        for (const Gpu &reading : gpus) {
+            if (reading.watts >= 0) gpuPower = std::max(0.0, gpuPower) + reading.watts;
+            if (!busiest || reading.watts > busiest->watts) busiest = &reading;
+        }
+        if (busiest) { gpuTemp = busiest->temp; gpu = busiest->busy; }
         if (gpu < 0)
             for (const QString &card : QDir(sysRoot + "/class/drm").entryList({"card*"}, QDir::Dirs)) {
                 QString value = readText(sysRoot + "/class/drm/" + card + "/device/gpu_busy_percent");
                 if (!value.isEmpty()) { gpu = value.toDouble(); break; }
             }
-        double rapl = raplPower(nowMs);
-        if (cpuPower < 0) cpuPower = rapl;
+        // Package power from the RAPL counter. The kernel keeps energy_uj
+        // root-only, so this only works where the system already allows it.
+        QString rapl = sysRoot + "/class/powercap/intel-rapl:0";
+        cpuPower = energyPower(rapl + "/energy_uj", nowMs, readText(rapl + "/max_energy_range_uj").toLongLong());
         // A laptop battery only measures the whole system while discharging.
         double batteryPower = -1;
         QString supplyDir = sysRoot + "/class/power_supply";
@@ -687,15 +763,35 @@ int main(int argc,char **argv) {
         put("class/powercap/intel-rapl:0/energy_uj","1000000"); m.sample(3000);
         ok=ok&&qFuzzyCompare(m.cpuPower,2.0)&&!m.powerPartial&&m.powerSource=="components"&&m.powerText()=="52";
         drop("class/powercap/intel-rapl:0/energy_uj");
-        put("class/hwmon/hwmon3/name","zenpower"); put("class/hwmon/hwmon3/power1_input","30000000"); put("class/hwmon/hwmon3/power2_input","10000000");
-        m.sample(4000); ok=ok&&qFuzzyCompare(m.cpuPower,40.0)&&m.powerText()=="90";
+        // Intel discrete GPUs: energy counter turned into watts (3 J in 1 s).
+        put("class/hwmon/hwmon3/name","xe"); put("class/hwmon/hwmon3/energy1_input","1000000"); m.sample(4000);
+        put("class/hwmon/hwmon3/energy1_input","4000000"); m.sample(5000); ok=ok&&qFuzzyCompare(m.gpuPower,53.0);
+        drop("class/hwmon/hwmon3/energy1_input");
+        // NVIDIA proprietary driver through NVML (fake library from the build).
+        QString fakeNvml=qEnvironmentVariable("TROFEO_TEST_NVML");
+        if(!fakeNvml.isEmpty()) {
+            put("bus/pci/devices/0000:01:00.0/vendor","0x10de"); put("bus/pci/devices/0000:01:00.0/class","0x030000");
+            put("bus/pci/devices/0000:01:00.0/power/control","on"); put("bus/pci/devices/0000:01:00.0/power/runtime_status","active");
+            QDir().mkpath(fakeSys.path()+"/bus/drivers/nvidia");
+            QFile::link(fakeSys.path()+"/bus/drivers/nvidia",fakeSys.path()+"/bus/pci/devices/0000:01:00.0/driver");
+            m.nvmlLibrary=fakeNvml; m.sample(6000);
+            // 120 W NVIDIA becomes the busiest card: its temperature and load win.
+            ok=ok&&qFuzzyCompare(m.gpuPower,170.0)&&m.gpuTemp==65&&m.gpu==90;
+            // A sleeping laptop GPU is not woken up and counts as 0 W.
+            put("bus/pci/devices/0000:01:00.0/power/control","auto"); put("bus/pci/devices/0000:01:00.0/power/runtime_status","suspended");
+            auto sessions=reinterpret_cast<int(*)()>(QLibrary(fakeNvml).resolve("fakeNvmlSessions"));
+            int before=sessions?sessions():-1;
+            m.sample(7000); ok=ok&&sessions&&sessions()==before&&qFuzzyCompare(m.gpuPower,50.0)&&m.gpuTemp==60;
+            QDir(fakeSys.path()+"/bus").removeRecursively();
+        }
+        m.sample(8000); ok=ok&&qFuzzyCompare(m.gpuPower,50.0)&&qFuzzyCompare(m.power,50.0)&&m.powerPartial;
         put("class/power_supply/BAT0/status","Charging"); put("class/power_supply/BAT0/power_now","20000000");
-        m.sample(5000); ok=ok&&m.powerSource=="components";
-        put("class/power_supply/BAT0/status","Discharging"); m.sample(6000); ok=ok&&m.powerSource=="battery"&&m.powerText()=="20";
+        m.sample(9000); ok=ok&&m.powerSource=="components";
+        put("class/power_supply/BAT0/status","Discharging"); m.sample(10000); ok=ok&&m.powerSource=="battery"&&m.powerText()=="20";
         drop("class/power_supply/BAT0/power_now"); put("class/power_supply/BAT0/current_now","2000000"); put("class/power_supply/BAT0/voltage_now","12000000");
-        m.sample(7000); ok=ok&&qFuzzyCompare(m.power,24.0);
+        m.sample(11000); ok=ok&&qFuzzyCompare(m.power,24.0);
         put("class/hwmon/hwmon4/name","corsairpsu"); put("class/hwmon/hwmon4/power1_input","180000000");
-        m.sample(8000); ok=ok&&m.powerSource=="psu"&&m.powerText()=="180"&&!m.powerPartial;
+        m.sample(12000); ok=ok&&m.powerSource=="psu"&&m.powerText()=="180"&&!m.powerPartial;
         QTextStream(stdout)<<(ok?"PASS: packet alignment, geometry, native layouts, audio renderers, power sources and input validation\n":"FAIL\n");
         return ok?0:1;
     }

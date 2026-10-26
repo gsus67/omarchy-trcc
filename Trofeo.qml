@@ -624,10 +624,10 @@ Panel {
             ListView {
               id: themeList
               width: parent.width
-              height: Math.min(contentHeight, Style.space(190))
-              clip: true
+              // Every theme visible: an inner scroll hid half of them; the panel scrolls itself.
+              height: contentHeight
+              interactive: false
               spacing: Style.space(4)
-              boundsBehavior: Flickable.StopAtBounds
               model: root.deviceData.themes || []
               delegate: Button {
                 required property var modelData
@@ -639,7 +639,6 @@ Panel {
                 selected: root.expandedTheme === modelData.path
                 onClicked: root.selectTheme(modelData.path)
               }
-              Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
             }
             Column {
               width: parent.width

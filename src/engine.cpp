@@ -894,7 +894,8 @@ public:
         bool animated=!active.isEmpty()||animatedLayouts.contains(layout);
         // Static layouts change once a second at most; animations use the chosen rate.
         int frameMs=animated?1000/settings["fps"].toInt(8):1000;
-        if(now-lastFrame<frameMs) return;
+        // The timer can fire a few ms early; a strict check would skip every other frame.
+        if(now-lastFrame<frameMs-frameMs/8) return;
         if(!active.isEmpty()) analyze();
         phase+=frameMs/1000.0;
         if(active.isEmpty()&&layout=="matrix") rain.step();
@@ -1108,7 +1109,7 @@ int main(int argc,char **argv) {
     if(!lock.tryLock(100)) { QTextStream(stderr)<<"El motor Trofeo ya está ejecutándose\n"; return 1; }
     engine.previews();
     if(!engine.listen()) { QTextStream(stderr)<<engine.server.errorString()<<'\n'; return 1; }
-    QTimer timer;
+    QTimer timer; timer.setTimerType(Qt::PreciseTimer);
     QObject::connect(&timer,&QTimer::timeout,[&]{ engine.tick(); if(timer.interval()!=engine.tickInterval()) timer.setInterval(engine.tickInterval()); });
     timer.start(125);
     return app.exec();

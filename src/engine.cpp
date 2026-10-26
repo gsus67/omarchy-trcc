@@ -1124,10 +1124,10 @@ int main(int argc,char **argv) {
             ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
             // Mostly filled output (light art on a dark picture) → the inverted run is kept.
             ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok;
-            tool.write("#!/bin/sh\ncase \"$*\" in *--invert*) printf 'IN\\n' > \"$2\";; *) printf '\xe2\x96\x88\xe2\x96\x88\\n' > \"$2\";; esac\n"); tool.close();
-            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"IN"};
+            tool.write("#!/bin/sh\ncase \"$*\" in *--invert*) printf 'I    \\n' > \"$2\";; *) printf '\xe2\x96\x88\xe2\x96\x88\\n' > \"$2\";; esac\n"); tool.close();
+            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"I"};
             ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok; tool.write("#!/bin/sh\nexit 1\n"); tool.close();
-            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"IN"};
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"I"};
             engine.settings["layout"]="focus";
         }
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;

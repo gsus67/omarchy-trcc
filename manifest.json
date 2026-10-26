@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.gsus67.omarchy-trcc",
   "name": "Omarchy TRCC",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "author": "gsus",
   "license": "GPL-3.0-or-later",
   "description": "Native control for the Thermalright Trofeo Vision without TRCC: themes, live metrics and audio visuals synced with Omarchy.",

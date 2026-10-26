@@ -29,10 +29,16 @@ bool loadImage(const QString &path, QImage &image) {
 }
 }
 
+// Theme names are shown in the panel; drop markup and control characters so a
+// shared theme cannot carry rich text (remote images, links) into the desktop.
+static QString cleanName(QString name) {
+    return name.remove(QRegularExpression("[<>&\\x00-\\x1f\\x7f]")).trimmed();
+}
+
 QString ThemeStore::validate(const QJsonObject &spec) {
     if(spec["schema"].toInt()!=1 || spec["width"].toInt()!=1280 || spec["height"].toInt()!=480)
         return uiText("El tema debe usar schema 1 y resolución 1280×480.");
-    QString name=spec["name"].toString().trimmed();
+    QString name=cleanName(spec["name"].toString());
     if(name.isEmpty() || name.size()>80) return uiText("El nombre del tema debe tener entre 1 y 80 caracteres.");
     if(spec.contains("backgroundColor")&&!validColor(spec["backgroundColor"].toString())) return uiText("Color de fondo no válido.");
     if(spec.contains("elements")&&!spec["elements"].isArray()) return uiText("elements debe ser una lista de textos.");
@@ -71,7 +77,7 @@ void ThemeStore::initialize(const QString &path) {
             background=folder+"/background.png";
             QImage image; if(!loadImage(background,image)) continue;
         }
-        entries.insert(id,{id,spec["name"].toString().trimmed(),background,spec});
+        entries.insert(id,{id,cleanName(spec["name"].toString()),background,spec});
     }
 }
 
@@ -90,6 +96,7 @@ QJsonObject ThemeStore::importFile(const QString &path) {
         if(parseError.error!=QJsonParseError::NoError||!document.isObject()) return failure(uiText("El archivo no contiene un tema JSON válido."));
         spec=document.object();
         QString error=validate(spec); if(!error.isEmpty()) return failure(error);
+        spec["name"]=cleanName(spec["name"].toString());
         if(spec.contains("background")) {
             QString relative=spec["background"].toString();
             QString base=input.canonicalPath();
@@ -99,7 +106,8 @@ QJsonObject ThemeStore::importFile(const QString &path) {
         }
     } else if(QStringList{"png","jpg","jpeg","webp"}.contains(suffix)) {
         if(!loadImage(input.canonicalFilePath(),background)) return failure(uiText("La imagen debe tener exactamente 1280×480 píxeles."));
-        spec={{"schema",1},{"width",1280},{"height",480},{"name",input.completeBaseName().left(80)},{"elements",QJsonArray{}}};
+        QString imageName=cleanName(input.completeBaseName()).left(80);
+        spec={{"schema",1},{"width",1280},{"height",480},{"name",imageName.isEmpty()?QStringLiteral("Imagen"):imageName},{"elements",QJsonArray{}}};
     } else return failure(uiText("Selecciona un tema .json o una imagen PNG/JPG/WebP."));
     if(!background.isNull()) spec["background"]="background.png";
     QByteArray identity=QJsonDocument(spec).toJson(QJsonDocument::Compact);
@@ -112,7 +120,7 @@ QJsonObject ThemeStore::importFile(const QString &path) {
     if(!background.isNull()&&!background.save(folder+"/background.png","PNG")) return cleanup();
     QSaveFile file(folder+"/theme.json");
     if(!file.open(QIODevice::WriteOnly)||file.write(QJsonDocument(spec).toJson())<0||!file.commit()) return cleanup();
-    entries.insert(id,{id,spec["name"].toString().trimmed(),background.isNull()?QString():folder+"/background.png",spec});
+    entries.insert(id,{id,cleanName(spec["name"].toString()),background.isNull()?QString():folder+"/background.png",spec});
     return {{"ok",true},{"message",uiText("Tema añadido. Selecciónalo para verlo y pulsa Aplicar.")},{"themeId",id}};
 }
 

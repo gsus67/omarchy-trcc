@@ -166,6 +166,11 @@ public:
         }
         while (!next.isEmpty() && next.first().isEmpty()) next.removeFirst();
         while (!next.isEmpty() && next.last().isEmpty()) next.removeLast();
+        // Drop the margin every line shares on the left, so the art is centered.
+        qsizetype indent = 160;
+        for (const QString &line : next)
+            if (!line.isEmpty()) { qsizetype spaces = 0; while (spaces < line.size() && line[spaces] == ' ') ++spaces; indent = std::min(indent, spaces); }
+        for (QString &line : next) line = line.mid(indent);
         if (!next.isEmpty()) { lines = next.mid(0, 40); reroll(); }
     }
     void setSource(const QString &path) { source = path; load(path); }

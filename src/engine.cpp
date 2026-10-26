@@ -1147,6 +1147,9 @@ int main(int argc,char **argv) {
             ok=art.open(QIODevice::WriteOnly)&&ok; art.write("\x1b[31mAB\tC\nline2\n"+QByteArray(40000,'x')); art.close();
             scenes::LogoScene scene; scene.load(art.fileName());
             ok=ok&&scene.lines.size()==3&&scene.lines[0]=="[31mABC"&&scene.lines[2].size()==160;
+            QFile indented(testState.path()+"/indented.txt"); ok=indented.open(QIODevice::WriteOnly)&&ok;
+            indented.write("\n    AB\n      C\n\n"); indented.close();
+            scenes::LogoScene shifted; shifted.load(indented.fileName()); ok=ok&&shifted.lines==QStringList({"AB","  C"});
             scene.load(testState.path()+"/missing.txt"); ok=ok&&scene.lines.size()==3;
         }
         // Fixed rows: CPU, GPU and RAM in every layout and orientation.

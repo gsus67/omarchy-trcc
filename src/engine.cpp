@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QBuffer>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QLocale>
 #include <QDir>
 #include <QFile>
@@ -496,6 +497,10 @@ public:
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
+    // Real frames per second over the last second, and the average cost of
+    // a frame in ms (draw; JPEG + USB), shown on the LCD and in the panel.
+    double fpsNow = 0, drawMs = 0, sendMs = 0;
+    quint64 fpsFrames = 0; qint64 fpsSince = 0;
     bool offline;
     Engine(bool off = false) : offline(off) {
         stateDir = QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation) + "/omarchy-trcc";
@@ -826,7 +831,7 @@ public:
             {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
-            {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
+            {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},{"fpsNow",qRound(fpsNow)},{"drawMs",qRound(drawMs*10)/10.0},{"sendMs",qRound(sendMs*10)/10.0},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
             {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuGHz",metrics.cpuGHz},{"cpuMaxGHz",metrics.cpuMaxGHz},{"vramUsedGiB",metrics.vramUsedGiB},{"vramTotalGiB",metrics.vramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial},
@@ -1036,9 +1041,12 @@ public:
         // While ttfx plays, send a frame only when it has finished a new one:
         // no half-drawn frames and no repeats, so the motion is even.
         if(useTtfx&&ttfxFor==layout&&ttfx.animating()&&!ttfx.takeFresh()) return;
+        QElapsedTimer cost; cost.start();
         QImage image=render(settings["layout"].toString(),active);
-        if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
+        drawMs=drawMs*.9+cost.nsecsElapsed()/1e6*.1; cost.restart();
+        if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) { ++framesSent; sendMs=sendMs*.9+cost.nsecsElapsed()/1e6*.1; }
         lastFrame=now;
+        if(now-fpsSince>=1000) { fpsNow=(framesSent-fpsFrames)*1000.0/std::max<qint64>(1,now-fpsSince); fpsFrames=framesSent; fpsSince=now; }
     }
     bool listen() {
         QLocalServer::removeServer(socketPath);

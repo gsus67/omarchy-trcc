@@ -411,6 +411,22 @@ Panel {
               Button { text: root.t("Métricas"); selected: root.lcdState.overlay_enabled === true; enabled: !root.busy; onClicked: root.run(["overlay", root.lcdState.overlay_enabled ? "off" : "on"]) }
               Button { text: root.t("Modo juego"); selected: root.lcdState.game_enabled === true; enabled: !root.busy; onClicked: root.run(["game", root.lcdState.game_enabled ? "off" : "on"]) }
             }
+            // Time format for every layout.
+            PanelSectionHeader { text: root.t("RELOJ"); foreground: root.barForeground }
+            Flow {
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: ["24h", "12h"]
+                Button {
+                  required property var modelData
+                  text: modelData === "24h" ? root.t("24 h (13:05)") : root.t("12 h (1:05 PM)")
+                  selected: (root.lcdState.clock || "24h") === modelData
+                  enabled: !root.busy
+                  onClicked: root.run(["clock", modelData])
+                }
+              }
+            }
             // Frame rate for animations only; static layouts stay at one frame a second.
             PanelSectionHeader { text: root.t("FPS DE ANIMACIÓN"); foreground: root.barForeground }
             Text {

@@ -589,7 +589,7 @@ public:
         customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
-                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}, {"fps", 0}};
+                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}, {"fps", 0}, {"clock", "24h"}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
@@ -599,6 +599,7 @@ public:
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
         settings["estimate"] = cleanEstimate(settings["estimate"].toObject());
         if (!frameRates.contains(settings["fps"].toInt(-1))) settings["fps"] = 0;
+        if (settings["clock"].toString() != "12h") settings["clock"] = "24h";
         logo.setSource(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omarchy/branding/screensaver.txt");
         // Until a picture is chosen, Picture FX shows the Omarchy art.
         picture.lines = logo.lines; picture.setSource(stateDir + "/picture.txt");
@@ -619,6 +620,15 @@ public:
         if (file.open(QIODevice::WriteOnly)) { file.write(QJsonDocument(settings).toJson()); file.commit(); }
     }
     QString visual() const { return settings["visual"].toString(); }
+    // Clock format chosen in Display: "24h" (13:05) or "12h" (1:05 PM).
+    bool twelveHour() const { return settings["clock"].toString() == "12h"; }
+    // The time, optionally without AM/PM (the large clocks draw it apart).
+    QString clockText(bool suffix = true) const {
+        QTime now = QTime::currentTime();
+        if (!twelveHour()) return now.toString("HH:mm");
+        return QString::number(now.hour() % 12 == 0 ? 12 : now.hour() % 12) + now.toString(":mm") + (suffix ? " " + clockSuffix() : QString());
+    }
+    QString clockSuffix() const { return QTime::currentTime().hour() < 12 ? "AM" : "PM"; }
     // "30 FPS": frames the LCD really received in the last second.
     QString fpsLabel() const { return QString::number(qRound(fpsNow)) + " FPS"; }
     bool usbConnected() { std::lock_guard<std::mutex> device(sender.lock); return usb.connected(); }
@@ -731,7 +741,7 @@ public:
                 {"cpu_power",metrics.cpuPower<0?"—":QString::number(qRound(metrics.cpuPower))},
                 {"gpu_power",metrics.gpuPower<0?"—":QString::number(qRound(metrics.gpuPower))},
                 {"power",metrics.powerText()},
-                {"time",QTime::currentTime().toString("HH:mm")},
+                {"time",clockText()},
                 {"date",QLocale::system().toString(QDate::currentDate(),"dd MMM yyyy")},{"theme",palette.name}};
             for(auto item:theme.spec["elements"].toArray()) {
                 QJsonObject e=item.toObject(); QString value=e["text"].toString();
@@ -780,7 +790,7 @@ public:
             }
             if (settings["overlay"].toBool()) {
                 text(painter,{40,15,850,50},"CPU "+temperature(metrics.cpuTemp)+"   GPU "+temperature(metrics.gpuTemp)+"   RAM "+QString::number(qRound(metrics.ram))+"%"+(metrics.power<0?QString():"   "+metrics.powerText()+" W"),25,palette.foreground);
-                text(painter,{930,15,310,50},QTime::currentTime().toString("HH:mm"),30,palette.foreground,true,Qt::AlignRight|Qt::AlignVCenter);
+                text(painter,{930,15,310,50},clockText(),30,palette.foreground,true,Qt::AlignRight|Qt::AlignVCenter);
                 text(painter,{40,410,1200,45},audioVisual.toUpper()+" / "+palette.name,20,palette.muted);
                 text(painter,{1000,410,240,45},fpsLabel(),16,palette.muted,false,Qt::AlignRight|Qt::AlignVCenter);
             }
@@ -803,7 +813,7 @@ public:
             // The time leads the header, with the PC total and the date beside it;
             // Clock shows the time large instead.
             text(painter, {560,20,520,50}, headerInfo(), 22, palette.muted, false, Qt::AlignRight|Qt::AlignVCenter);
-            if (layout != "clock") text(painter, {1090,12,150,62}, QTime::currentTime().toString("HH:mm"), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
+            if (layout != "clock") text(painter, {990,12,250,62}, clockText(), 40, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
             if (layout == "terminal") {
                 text(painter,{40,85,1200,55},"> omarchy-trcc --status",28,palette.green);
                 for (int i=0;i<count;++i) {
@@ -829,7 +839,8 @@ public:
             } else if (layout == "fx") {
                 // The rows are the animated art itself (drawn above).
             } else if (layout == "clock") {
-                text(painter,{40,62,1200,220},QTime::currentTime().toString("HH:mm"),190,palette.foreground,true,Qt::AlignCenter);
+                text(painter,{40,62,1200,220},clockText(false),190,palette.foreground,true,Qt::AlignCenter);
+                if (twelveHour()) text(painter,{1000,190,240,60},clockSuffix(),40,palette.muted,true,Qt::AlignLeft|Qt::AlignVCenter);
                 text(painter,{40,272,1200,40},QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(),24,palette.muted,false,Qt::AlignCenter);
                 for (int i=0;i<count;++i) {
                     double x = 40+i*1240.0/count;
@@ -913,7 +924,7 @@ public:
             painter.fillRect(QRectF(0,0,width,140), band); painter.fillRect(QRectF(0,960,width,320), band);
         }
         text(painter, {30,25,420,60}, "TROFEO", 34, palette.accent, true);
-        if (layout != "clock") text(painter, {30,25,420,60}, QTime::currentTime().toString("HH:mm"), 34, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
+        if (layout != "clock") text(painter, {30,25,420,60}, clockText(), 34, palette.foreground, true, Qt::AlignRight|Qt::AlignVCenter);
         text(painter, {30,85,420,40}, palette.name + "  ·  " + headerInfo(), 20, palette.muted);
         // Three stacked slots for the CPU/GPU/RAM rows.
         auto slotTop = [](int i) { return 160.0 + i * 310; };
@@ -950,7 +961,8 @@ public:
                 text(painter, {30,cy+12,420,36}, data[i].detail, 20, palette.muted, false, Qt::AlignCenter);
             }
         } else if (layout == "clock") {
-            text(painter, {0,150,width,190}, QTime::currentTime().toString("HH:mm"), 126, palette.foreground, true, Qt::AlignCenter);
+            text(painter, {0,150,width,190}, clockText(false), 126, palette.foreground, true, Qt::AlignCenter);
+            if (twelveHour()) text(painter, {0,300,width,40}, clockSuffix(), 26, palette.muted, true, Qt::AlignCenter);
             text(painter, {0,340,width,40}, QLocale::system().toString(QDate::currentDate(),"dddd d MMMM").toUpper(), 22, palette.muted, false, Qt::AlignCenter);
             for (int i = 0; i < data.size(); ++i) {
                 double y = 440 + i * 210;
@@ -1017,7 +1029,7 @@ public:
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
-            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]}};
+            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]},{"clock",settings["clock"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usbConnected()}, {"deviceError",usbError()},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},{"fpsNow",qRound(fpsNow)},{"autoReason",settings["fps"].toInt()==0?autoRate.reason:QString()},{"drawMs",qRound(drawMs*10)/10.0},{"sendMs",qRound(sendMs*10)/10.0},
@@ -1070,6 +1082,8 @@ public:
             else return invalid();
             if(cleanEstimate(next)!=next) return invalid();
             settings["estimate"]=next; metrics.estimate=next; metrics.sample();
+        } else if(op=="clock") {
+            if(value!="24h"&&value!="12h") return invalid(); settings["clock"]=value;
         } else if(op=="fps") {
             bool ok; int n=value=="auto"?0:value.toInt(&ok); if(value=="auto") ok=true;
             if(!ok||!frameRates.contains(n)) return invalid(); settings["fps"]=n;
@@ -1362,6 +1376,13 @@ int main(int argc,char **argv) {
             engine.autoRate=rate; ok=ok&&engine.frameRate()==4;
         }
         ok=ok&&!engine.command({{"command","fps"},{"args",QJsonArray{"7"}}})["ok"].toBool()&&!engine.command({{"command","fps"},{"args",QJsonArray{"x"}}})["ok"].toBool();
+        // Clock format: 24 h by default, 12 h on request, anything else refused.
+        ok=ok&&engine.clockText().size()==5&&!engine.twelveHour();
+        ok=ok&&engine.command({{"command","clock"},{"args",QJsonArray{"12h"}}})["ok"].toBool()&&engine.twelveHour();
+        ok=ok&&(engine.clockText().endsWith(" AM")||engine.clockText().endsWith(" PM"))&&!engine.clockText(false).contains("M");
+        ok=ok&&!engine.command({{"command","clock"},{"args",QJsonArray{"13h"}}})["ok"].toBool();
+        for(const QString &layout:layouts) ok=ok&&!engine.render(layout,"").isNull();
+        ok=ok&&engine.command({{"command","clock"},{"args",QJsonArray{"24h"}}})["ok"].toBool();
         // The branding art is plain text: control characters dropped, size capped,
         // and a missing file keeps the art already loaded.
         {

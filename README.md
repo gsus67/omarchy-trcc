@@ -85,6 +85,7 @@ Built-in layouts as the Trofeo shows them (the animated ones are recordings of t
   matrix, rings…); each effect is followed by a few seconds with live data in
   its final colors. Nothing extra is installed: without ttfx they fall back to
   built-in effects. The screen also follows the system palette automatically.
+- Clock in Display: 24 h (13:05) or 12 h (1:05 PM), for every layout.
 - Animation FPS in Display: Auto (recommended), 4, 8, 15 or 30, for the visuals
   and the animated layouts only; static layouts send one frame a second. Auto
   measures how much the image changes between frames and runs from 2 to 30 FPS

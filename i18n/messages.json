@@ -136,6 +136,9 @@
     "movimiento bajo": "low motion",
     "imagen quieta": "still image",
     "CPU ocupada": "busy CPU",
-    "Métricas FX": "Metrics FX"
+    "Métricas FX": "Metrics FX",
+    "RELOJ": "CLOCK",
+    "24 h (13:05)": "24 h (13:05)",
+    "12 h (1:05 PM)": "12 h (1:05 PM)"
   }
 }

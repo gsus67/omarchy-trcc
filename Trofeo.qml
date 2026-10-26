@@ -624,10 +624,14 @@ Panel {
             ListView {
               id: themeList
               width: parent.width
-              // Every theme visible: an inner scroll hid half of them; the panel scrolls itself.
-              height: contentHeight
-              interactive: false
+              // Ten rows visible (the ten built-in themes); imported ones scroll,
+              // with the bar shown whenever the mouse is over the list.
+              readonly property real rowHeight: count > 0 ? (contentHeight + spacing) / count : 0
+              height: Math.min(contentHeight, rowHeight * 10 - spacing)
+              clip: true
               spacing: Style.space(4)
+              boundsBehavior: Flickable.StopAtBounds
+              HoverHandler { id: themeListHover }
               model: root.deviceData.themes || []
               delegate: Button {
                 required property var modelData
@@ -638,6 +642,9 @@ Panel {
                 leftAlign: true
                 selected: root.expandedTheme === modelData.path
                 onClicked: root.selectTheme(modelData.path)
+              }
+              Controls.ScrollBar.vertical: Controls.ScrollBar {
+                policy: themeList.contentHeight > themeList.height && themeListHover.hovered ? Controls.ScrollBar.AlwaysOn : Controls.ScrollBar.AsNeeded
               }
             }
             Column {

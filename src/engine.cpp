@@ -207,6 +207,38 @@ public:
     }
 };
 
+// Auto frame rate from what really moves: the share of sampled pixels that
+// changed since the previous frame picks 2–30 FPS; a busy CPU caps it. The
+// rate rises at once and falls one step a second, so motion is never cut short.
+struct AutoRate {
+    int fps = 15; qint64 since = 0;
+    QString reason = QStringLiteral("movimiento medio");
+    // Changed share of a 160×60 sample grid (1 when sizes differ).
+    static double motion(const QImage &a, const QImage &b) {
+        if (a.isNull() || b.isNull() || a.size() != b.size() || a.format() != b.format()) return 1;
+        int changed = 0, total = 0;
+        for (int y = 4; y < a.height(); y += 8)
+            for (int x = 4; x < a.width(); x += 8, ++total) {
+                QRgb p = a.pixel(x, y), q = b.pixel(x, y);
+                if (std::abs(qRed(p) - qRed(q)) + std::abs(qGreen(p) - qGreen(q)) + std::abs(qBlue(p) - qBlue(q)) > 24) ++changed;
+            }
+        return total ? double(changed) / total : 0;
+    }
+    void update(double moved, double cpu, qint64 now) {
+        static const int steps[] = {2, 6, 12, 20, 30};
+        int target = moved > .03 ? 30 : moved > .01 ? 20 : moved > .002 ? 12 : moved > 0 ? 6 : 2;
+        int cap = cpu > 85 ? 4 : cpu > 65 ? 12 : 30;
+        QString why = moved > .03 ? "movimiento alto" : moved > .01 ? "movimiento medio" : moved > 0 ? "movimiento bajo" : "imagen quieta";
+        if (target > cap) { target = cap; why = "CPU ocupada"; }
+        if (target >= fps || cap < fps) { fps = target; since = now; reason = why; return; }
+        // Falling: one step a second, never below what is needed now.
+        if (now - since < 1000) return;
+        int lower = target;
+        for (int step : steps) if (step < fps) lower = std::max(lower, step);
+        fps = lower; since = now; reason = why;
+    }
+};
+
 // Encodes and sends frames on its own thread: JPEG + USB take 10–20 ms, and
 // doing it on the frame clock made animation timing uneven. Only the newest
 // frame waits; one that arrives while another is in flight replaces it. All
@@ -532,6 +564,7 @@ public:
     QByteArray samples;
     std::array<double, 32> levels{};
     double phase = 0;
+    AutoRate autoRate; QImage previousFrame;
     scenes::MatrixRain rain;
     scenes::LogoScene logo;
     // Omarchy FX: the metric rows assembling with the screensaver effects.
@@ -885,7 +918,7 @@ public:
             {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]},{"fps",settings["fps"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usbConnected()}, {"deviceError",usbError()},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
-            {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},{"fpsNow",qRound(fpsNow)},{"drawMs",qRound(drawMs*10)/10.0},{"sendMs",qRound(sendMs*10)/10.0},
+            {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},{"fpsNow",qRound(fpsNow)},{"autoReason",settings["fps"].toInt()==0?autoRate.reason:QString()},{"drawMs",qRound(drawMs*10)/10.0},{"sendMs",qRound(sendMs*10)/10.0},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
             {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuGHz",metrics.cpuGHz},{"cpuMaxGHz",metrics.cpuMaxGHz},{"vramUsedGiB",metrics.vramUsedGiB},{"vramTotalGiB",metrics.vramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial},
@@ -958,21 +991,10 @@ public:
         bool animated=(!game&&!visual().isEmpty())||animatedLayouts.contains(settings["layout"].toString());
         return animated?std::min(125,1000/frameRate()):125;
     }
-    // The chosen rate, or auto: fast only while something moves. Omarchy runs
-    // at 15 while the art assembles and 2 while it holds; Matrix at 10; audio
-    // visuals at 15 with sound and 4 in silence; 4 whenever the CPU is busy.
-    // (Matrix runs at 15: its glyphs slide by pixels and need the frames.)
+    // The chosen rate, or Auto (see AutoRate): 2–30 by measured motion.
     int frameRate() const {
         int chosen=settings["fps"].toInt();
-        if(chosen>0) return chosen;
-        if(metrics.cpu>75) return 4;
-        if(!visual().isEmpty()) return *std::max_element(levels.begin(),levels.end())<.02?4:15;
-        QString layout=settings["layout"].toString();
-        if(!ttfxFor.isEmpty()&&ttfxFor==layout) return ttfx.animating()?15:2;
-        if(layout=="omarchy") return logo.animating()?15:2;
-        if(layout=="fx") return fx.animating()?15:2;
-        if(layout=="picture") return picture.animating()?15:2;
-        return 15;
+        return chosen>0?chosen:autoRate.fps;
     }
     // Turns a picture (≤ 20 MB) into text art in picture.txt, the same way
     // `omarchy branding screensaver image` does: Omarchy's own
@@ -1084,7 +1106,8 @@ public:
                 if(layout=="omarchy") logo.load(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/omarchy/branding/screensaver.txt");
                 // Omarchy FX gets a tight canvas so its few rows are drawn large.
                 int fps=settings["fps"].toInt();
-                ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:15,layout=="fx"?4:8,layout=="fx"?2:4);
+                // Auto lets ttfx run at 30; the LCD takes as many frames as the motion needs.
+                ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:30,layout=="fx"?4:8,layout=="fx"?2:4);
                 ttfxFor=layout;
             }
         } else {
@@ -1099,6 +1122,7 @@ public:
         QElapsedTimer cost; cost.start();
         QImage image=render(settings["layout"].toString(),active);
         drawMs=drawMs*.9+cost.nsecsElapsed()/1e6*.1; cost.restart();
+        if(animated&&settings["fps"].toInt()==0) { autoRate.update(AutoRate::motion(image,previousFrame),metrics.cpu,now); previousFrame=image; }
         if(!offline) sender.submit(image,settings["orientation"].toInt());
         lastFrame=now;
         framesSent=sender.sent; sendMs=sender.sendMs;
@@ -1222,12 +1246,19 @@ int main(int argc,char **argv) {
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
         engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
         engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;
-        // Auto: Matrix 15, Omarchy 2 while holding, 4 with a busy CPU.
+        // Auto: rises at once with motion, falls a step a second, CPU caps at once.
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"auto"}}})["ok"].toBool()&&engine.settings["fps"].toInt(-1)==0;
-        engine.settings["layout"]="matrix"; engine.metrics.cpu=10; ok=ok&&engine.frameRate()==15;
-        engine.metrics.cpu=90; ok=ok&&engine.frameRate()==4; engine.metrics.cpu=10;
-        engine.settings["layout"]="omarchy"; while(engine.logo.animating()) engine.logo.step(.5);
-        ok=ok&&engine.frameRate()==2; engine.settings["layout"]="focus";
+        {
+            QImage still(W,H,QImage::Format_RGB32); still.fill(Qt::black);
+            QImage moved=still; QPainter mp(&moved); mp.fillRect(0,0,W,H/4,Qt::white); mp.end();
+            ok=ok&&AutoRate::motion(still,still)==0&&AutoRate::motion(still,moved)>.2&&AutoRate::motion(still,QImage())==1;
+            AutoRate rate; rate.update(.2,10,0); ok=ok&&rate.fps==30&&rate.reason=="movimiento alto";
+            rate.update(0,10,500); ok=ok&&rate.fps==30;
+            rate.update(0,10,1000); ok=ok&&rate.fps==20;
+            rate.update(0,10,2000); rate.update(0,10,3000); rate.update(0,10,4000); ok=ok&&rate.fps==2&&rate.reason=="imagen quieta";
+            rate.update(.2,90,4100); ok=ok&&rate.fps==4&&rate.reason=="CPU ocupada";
+            engine.autoRate=rate; ok=ok&&engine.frameRate()==4;
+        }
         ok=ok&&!engine.command({{"command","fps"},{"args",QJsonArray{"7"}}})["ok"].toBool()&&!engine.command({{"command","fps"},{"args",QJsonArray{"x"}}})["ok"].toBool();
         // The branding art is plain text: control characters dropped, size capped,
         // and a missing file keeps the art already loaded.

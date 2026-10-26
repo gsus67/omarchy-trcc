@@ -416,6 +416,7 @@ Panel {
             Text {
               textFormat: Text.PlainText
               text: root.t("Ahora en la Trofeo: ") + (root.deviceData.fpsNow || 0) + " FPS"
+                + (root.deviceData.autoReason ? " · " + root.t(root.deviceData.autoReason) : "")
               color: root.barForeground; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             Flow {
@@ -437,7 +438,7 @@ Panel {
               textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
-              text: root.t("Solo para los visuales y los temas animados (Matrix, Omarchy). Auto sube los FPS mientras hay movimiento y los baja en pausas, en silencio o con la CPU ocupada. Más FPS, más fluido y más CPU.")
+              text: root.t("Solo para los visuales y los temas animados. Auto mide cuánto cambia la imagen y va de 2 a 30 FPS: sube al momento cuando hay movimiento y baja poco a poco; con la CPU ocupada pone un tope. Más FPS, más fluido y más CPU.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }

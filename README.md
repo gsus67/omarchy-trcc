@@ -87,8 +87,10 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
   built-in effects. The screen also follows the system palette automatically.
 - Animation FPS in Display: Auto (recommended), 4, 8, 15 or 30, for the visuals
   and the animated layouts only; static layouts send one frame a second. Auto
-  runs Omarchy at 15 while the art assembles and 2 while it holds, Matrix at
-  15, visuals at 15 with sound and 4 in silence, and 4 whenever the CPU is busy.
+  measures how much the image changes between frames and runs from 2 to 30 FPS
+  (30 with high motion, 2 on a still image), rising at once and falling one
+  step a second; a busy CPU caps it at 12 or 4. The panel shows the current
+  FPS and why.
 - CPU, GPU and RAM temperature with load and watts, CPU clock, VRAM and RAM in
   use, total power, date and clock. A missing sensor is shown as `—`.
 - Software brightness, 0/90/180/270° rotation, metrics over the visuals and

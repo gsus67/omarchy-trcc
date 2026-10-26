@@ -464,21 +464,20 @@ public:
         QFont font(palette.font); font.setPixelSize(size); font.setBold(bold);
         p.setFont(font); p.setPen(color); p.drawText(rect, alignment, value);
     }
-    // The rows every built-in layout shows: temperature as the value, load
-    // and watts (RAM: use and size) beside it. ring = load for the rings layout.
+    // The rows every built-in layout shows: temperature as the value, then
+    // load and watts (RAM: use and GiB in use). ring = load for the rings layout.
     struct Field { QString label, value, detail; double ring; };
     QList<Field> fieldData() const {
+        auto percent = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + "%"; };
         auto watts = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + " W"; };
         auto join = [](QStringList parts) { parts.removeAll(QString()); return parts.join(QString::fromUtf8("  ·  ")); };
-        QString gpuLoad = metrics.gpu < 0 ? uiText("SIN SENSOR DE CARGA") : uiText("%1% CARGA").arg(qRound(metrics.gpu));
-        QString ramSize = metrics.ramTotalGiB <= 0 ? QString() : QString("%1 / %2 GiB").arg(metrics.ramUsedGiB,0,'f',1).arg(metrics.ramTotalGiB,0,'f',1);
+        QString ramUsed = metrics.ramTotalGiB <= 0 ? QString() : QString("%1 GiB").arg(metrics.ramUsedGiB,0,'f',1);
         // Without a RAM sensor its use takes the value slot.
         bool ramSensor = metrics.ramTemp >= 0;
         return {
-            {"CPU", temperature(metrics.cpuTemp), join({uiText("%1% CARGA").arg(qRound(metrics.cpu)), watts(metrics.cpuPower)}), metrics.cpu},
-            {"GPU", temperature(metrics.gpuTemp), join({gpuLoad, watts(metrics.gpuPower)}), std::max(0., metrics.gpu)},
-            {"RAM", ramSensor ? temperature(metrics.ramTemp) : QString::number(qRound(metrics.ram)) + "%",
-                join({ramSensor ? uiText("%1% EN USO").arg(qRound(metrics.ram)) : QString(), ramSize}), metrics.ram}};
+            {"CPU", temperature(metrics.cpuTemp), join({percent(metrics.cpu), watts(metrics.cpuPower)}), metrics.cpu},
+            {"GPU", temperature(metrics.gpuTemp), join({percent(metrics.gpu), watts(metrics.gpuPower)}), std::max(0., metrics.gpu)},
+            {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram), join({ramSensor ? percent(metrics.ram) : QString(), ramUsed}), metrics.ram}};
     }
     // Total watts and date for the header, next to the time.
     QString headerInfo() const {
@@ -785,9 +784,9 @@ int main(int argc,char **argv) {
             ok=ok&&image.size()==((angle==90||angle==270)?QSize(H,W):QSize(W,H));
         }
         qputenv("LC_ALL","en_US.UTF-8");
-        ok=ok&&uiText("%1% CARGA")=="%1% LOAD";
+        ok=ok&&uiText("No se pudo iniciar libusb")=="Could not initialize libusb";
         qputenv("LC_ALL","es_MX.UTF-8");
-        ok=ok&&uiText("%1% CARGA")=="%1% CARGA";
+        ok=ok&&uiText("No se pudo iniciar libusb")=="No se pudo iniciar libusb";
         // Power sources against a fake sysfs tree.
         QTemporaryDir fakeSys;
         auto put=[&](const QString &file,const QByteArray &value) {

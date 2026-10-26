@@ -403,13 +403,14 @@ Panel {
               width: parent.width
               spacing: Style.space(6)
               Repeater {
-                model: [4, 8, 15, 30]
+                // 0 = Auto, the recommended choice.
+                model: [0, 4, 8, 15, 30]
                 Button {
                   required property var modelData
-                  text: modelData === 8 ? "8 · " + root.t("recomendado") : String(modelData)
-                  selected: (root.lcdState.fps || 8) === modelData
+                  text: modelData === 0 ? root.t("Auto · recomendado") : String(modelData)
+                  selected: (root.lcdState.fps === undefined ? 0 : root.lcdState.fps) === modelData
                   enabled: !root.busy
-                  onClicked: root.run(["fps", String(modelData)])
+                  onClicked: root.run(["fps", modelData === 0 ? "auto" : String(modelData)])
                 }
               }
             }
@@ -417,7 +418,7 @@ Panel {
               textFormat: Text.PlainText
               width: parent.width
               wrapMode: Text.WordWrap
-              text: root.t("Solo para los visuales y los temas animados (Matrix, Omarchy). Más FPS, más fluido y más CPU.")
+              text: root.t("Solo para los visuales y los temas animados (Matrix, Omarchy). Auto sube los FPS mientras hay movimiento y los baja en pausas, en silencio o con la CPU ocupada. Más FPS, más fluido y más CPU.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
           }

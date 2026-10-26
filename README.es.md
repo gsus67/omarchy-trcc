@@ -57,7 +57,7 @@ Los ocho diseños propios tal como los muestra la Trofeo (1280×480, aquí a la 
 - Pestaña Consumo en PCs de escritorio sin fuente con sensor: estima el resto del PC (placa, RAM, discos, ventiladores, refrigeración, RGB) y la pérdida de la fuente.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
 - Ocho diseños nativos: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix y Omarchy**. Matrix (lluvia de caracteres) y Omarchy (tu logo de `~/.config/omarchy/branding/screensaver.txt` armándose con un efecto distinto en cada ciclo, como el protector de pantalla de Omarchy) son animados, con los datos encima. La pantalla también sigue automáticamente la paleta del sistema.
-- FPS de animación en Pantalla: 4, 8 (recomendado), 15 o 30, solo para los visuales y los diseños animados; los estáticos envían un fotograma por segundo.
+- FPS de animación en Pantalla: Auto (recomendado), 4, 8, 15 o 30, solo para los visuales y los diseños animados; los estáticos envían un fotograma por segundo. Auto pone Omarchy a 15 mientras el logo se arma y a 2 mientras está quieto, Matrix a 10, los visuales a 15 con sonido y a 4 en silencio, y 4 siempre que la CPU está ocupada.
 - Temperatura de CPU, GPU y RAM con carga y vatios, frecuencia de la CPU, VRAM y RAM en uso, consumo total, fecha y reloj. Un sensor no disponible se muestra como `—`.
 - Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).
 - Cuatro visuales propios: **Bars, Wave, Rings y Particles**, analizados desde la salida de audio del sistema. No usa el micrófono ni guarda audio.

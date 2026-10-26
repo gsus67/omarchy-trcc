@@ -43,8 +43,8 @@ static constexpr int W = 1280, H = 480;
 static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy"};
 // Layouts with a moving background: drawn at the chosen frame rate, like the visuals.
 static const QStringList animatedLayouts = {"matrix", "omarchy"};
-// Frame rates offered for animations; 8 is the recommended balance of smoothness and CPU.
-static const QList<int> frameRates = {4, 8, 15, 30};
+// Frame rates offered for animations; 0 = auto (recommended), see Engine::frameRate().
+static const QList<int> frameRates = {0, 4, 8, 15, 30};
 static const QStringList visualIds = {"bars", "wave", "rings", "particles"};
 static QString readText(const QString &path) {
     QFile file(path);
@@ -494,7 +494,7 @@ public:
         customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
-                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}, {"fps", 8}};
+                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}, {"fps", 0}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
@@ -503,7 +503,7 @@ public:
         settings["brightness"] = std::clamp(settings["brightness"].toInt(100), 0, 100);
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
         settings["estimate"] = cleanEstimate(settings["estimate"].toObject());
-        if (!frameRates.contains(settings["fps"].toInt())) settings["fps"] = 8;
+        if (!frameRates.contains(settings["fps"].toInt(-1))) settings["fps"] = 0;
         logo.setSource(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omarchy/branding/screensaver.txt");
         metrics.estimate = settings["estimate"].toObject();
         palette.load(); metrics.sample();
@@ -847,7 +847,8 @@ public:
             if(cleanEstimate(next)!=next) return invalid();
             settings["estimate"]=next; metrics.estimate=next; metrics.sample();
         } else if(op=="fps") {
-            bool ok; int n=value.toInt(&ok); if(!ok||!frameRates.contains(n)) return invalid(); settings["fps"]=n;
+            bool ok; int n=value=="auto"?0:value.toInt(&ok); if(value=="auto") ok=true;
+            if(!ok||!frameRates.contains(n)) return invalid(); settings["fps"]=n;
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
         } else if(op=="reconnect") { usb.close(); lastConnect=0; }
@@ -862,7 +863,18 @@ public:
     int tickInterval() const {
         bool game=settings["game"].toBool()&&metrics.cpu>75;
         bool animated=(!game&&!visual().isEmpty())||animatedLayouts.contains(settings["layout"].toString());
-        return animated?std::min(125,1000/settings["fps"].toInt(8)):125;
+        return animated?std::min(125,1000/frameRate()):125;
+    }
+    // The chosen rate, or auto: fast only while something moves. Omarchy runs
+    // at 15 while the art assembles and 2 while it holds; Matrix at 10; audio
+    // visuals at 15 with sound and 4 in silence; 4 whenever the CPU is busy.
+    int frameRate() const {
+        int chosen=settings["fps"].toInt();
+        if(chosen>0) return chosen;
+        if(metrics.cpu>75) return 4;
+        if(!visual().isEmpty()) return *std::max_element(levels.begin(),levels.end())<.02?4:15;
+        if(settings["layout"].toString()=="omarchy") return logo.animating()?15:2;
+        return 10;
     }
     void tick() {
         qint64 now=QDateTime::currentMSecsSinceEpoch();
@@ -893,7 +905,7 @@ public:
         QString active=game?QString():visual(), layout=settings["layout"].toString();
         bool animated=!active.isEmpty()||animatedLayouts.contains(layout);
         // Static layouts change once a second at most; animations use the chosen rate.
-        int frameMs=animated?1000/settings["fps"].toInt(8):1000;
+        int frameMs=animated?1000/frameRate():1000;
         // The timer can fire a few ms early; a strict check would skip every other frame.
         if(now-lastFrame<frameMs-frameMs/8) return;
         if(!active.isEmpty()) analyze();
@@ -967,6 +979,12 @@ int main(int argc,char **argv) {
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
         engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
         engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;
+        // Auto: Matrix 10, Omarchy 2 while holding, 4 with a busy CPU.
+        ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"auto"}}})["ok"].toBool()&&engine.settings["fps"].toInt(-1)==0;
+        engine.settings["layout"]="matrix"; engine.metrics.cpu=10; ok=ok&&engine.frameRate()==10;
+        engine.metrics.cpu=90; ok=ok&&engine.frameRate()==4; engine.metrics.cpu=10;
+        engine.settings["layout"]="omarchy"; while(engine.logo.animating()) engine.logo.step(.5);
+        ok=ok&&engine.frameRate()==2; engine.settings["layout"]="focus";
         ok=ok&&!engine.command({{"command","fps"},{"args",QJsonArray{"7"}}})["ok"].toBool()&&!engine.command({{"command","fps"},{"args",QJsonArray{"x"}}})["ok"].toBool();
         // The branding art is plain text: control characters dropped, size capped,
         // and a missing file keeps the art already loaded.

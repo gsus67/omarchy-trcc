@@ -199,6 +199,8 @@ public:
         painter.setRenderHint(QPainter::Antialiasing, true);
     }
     Effect currentEffect() const { return effect; }
+    // True while the art is assembling; false while it holds still.
+    bool animating() const { return elapsed < revealSeconds; }
 private:
     QString source;
     Effect effect = Decrypt;

@@ -135,6 +135,7 @@
     "movimiento medio": "medium motion",
     "movimiento bajo": "low motion",
     "imagen quieta": "still image",
-    "CPU ocupada": "busy CPU"
+    "CPU ocupada": "busy CPU",
+    "Métricas FX": "Metrics FX"
   }
 }

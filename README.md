@@ -48,10 +48,10 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
   </tr>
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
   <tr>
-    <td><img src="assets/gallery/lcd-fx.png" alt="Omarchy FX" width="400"></td>
+    <td><img src="assets/gallery/lcd-fx.png" alt="Metrics FX" width="400"></td>
     <td></td>
   </tr>
-  <tr><td align="center">Omarchy FX</td><td></td></tr>
+  <tr><td align="center">Metrics FX</td><td></td></tr>
 </table>
 
 ## Features
@@ -71,10 +71,10 @@ Built-in layouts as the Trofeo shows them (1280×480, here at half size):
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
 - Ten native layouts: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix,
-  Omarchy, Omarchy FX and Picture FX**. The last four are animated, with the
+  Omarchy, Metrics FX and Picture FX**. The last four are animated, with the
   data on top: Matrix (falling glyphs); Omarchy (your
   `~/.config/omarchy/branding/screensaver.txt` art assembling with a different
-  effect each cycle, like the Omarchy screensaver); Omarchy FX (the CPU/GPU/RAM
+  effect each cycle, like the Omarchy screensaver); Metrics FX (the CPU/GPU/RAM
   rows assembling with those effects); and Picture FX (a picture you choose in
   Themes → Picture FX → **Choose picture…**, turned into text art with Omarchy's
   own `omarchy-transcode-ascii`, exactly like `omarchy branding screensaver

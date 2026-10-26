@@ -567,7 +567,7 @@ public:
     AutoRate autoRate; QImage previousFrame;
     scenes::MatrixRain rain;
     scenes::LogoScene logo;
-    // Omarchy FX: the metric rows assembling with the screensaver effects.
+    // Métricas FX: the metric rows assembling with the screensaver effects.
     scenes::LogoScene fx;
     // Picture FX: the user's picture as block art with the same effects.
     scenes::LogoScene picture;
@@ -686,7 +686,7 @@ public:
         parts.removeAll(QString());
         return parts;
     }
-    // Omarchy FX text: fixed-width rows so columns line up while effects run.
+    // Métricas FX text: fixed-width rows so columns line up while effects run.
     QStringList fxRows() const {
         QStringList rows;
         for (const Field &field : fieldData()) {
@@ -909,7 +909,7 @@ public:
             else liveFile.cancelWriting();
         }
         QJsonArray themes, visuals;
-        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy", "Omarchy FX", "Picture FX"};
+        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy", uiText("Métricas FX"), "Picture FX"};
         for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
         for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
@@ -1098,13 +1098,13 @@ public:
         if(!active.isEmpty()) analyze();
         phase+=frameMs/1000.0;
         if(active.isEmpty()&&layout=="matrix") rain.step(frameMs/1000.0);
-        // Omarchy, Omarchy FX and Picture FX use ttfx when the system has it:
+        // Omarchy, Métricas FX and Picture FX use ttfx when the system has it:
         // run an effect, hold the result, then the next one.
         bool useTtfx=active.isEmpty()&&(layout=="omarchy"||layout=="fx"||layout=="picture")&&scenes::TtfxScene::available();
         if(useTtfx) {
             if(ttfxFor!=layout||!ttfx.started()||ttfx.step(frameMs/1000.0)) {
                 if(layout=="omarchy") logo.load(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/omarchy/branding/screensaver.txt");
-                // Omarchy FX gets a tight canvas so its few rows are drawn large.
+                // Métricas FX gets a tight canvas so its few rows are drawn large.
                 int fps=settings["fps"].toInt();
                 // Auto lets ttfx run at 30; the LCD takes as many frames as the motion needs.
                 ttfx.start(layout=="omarchy"?logo.lines:layout=="picture"?picture.lines:fxRows(),fps>0?fps:30,layout=="fx"?4:8,layout=="fx"?2:4);

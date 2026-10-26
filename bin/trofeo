@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from i18n import translate as tr
 
 COMMANDS = ("status", "brightness", "orientation", "theme", "overlay", "game",
-            "visual", "accent", "follow-accent", "reconnect", "import-theme", "remove-theme", "estimate", "fps")
+            "visual", "accent", "follow-accent", "reconnect", "import-theme", "remove-theme", "estimate", "fps", "picture")
 
 
 def request(command, args=(), socket_path=None):

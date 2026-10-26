@@ -24,7 +24,7 @@ The panel tabs (Home is shown above; Power is under [Compatibility](#compatibili
   </tr>
 </table>
 
-The eight built-in layouts as the Trofeo shows them (1280×480, here at half size):
+Built-in layouts as the Trofeo shows them (1280×480, here at half size):
 
 <table>
   <tr>
@@ -47,6 +47,11 @@ The eight built-in layouts as the Trofeo shows them (1280×480, here at half siz
     <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
   </tr>
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-fx.png" alt="Omarchy FX" width="400"></td>
+    <td></td>
+  </tr>
+  <tr><td align="center">Omarchy FX</td><td></td></tr>
 </table>
 
 ## Features
@@ -65,11 +70,14 @@ The eight built-in layouts as the Trofeo shows them (1280×480, here at half siz
   (board, RAM, drives, fans, cooling, RGB) and the PSU loss.
 - Import 1280×480 images and JSON themes with metrics; you can remove the
   imported copies without deleting your originals.
-- Eight native layouts: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix
-  and Omarchy**. Matrix (falling glyphs) and Omarchy (your
+- Ten native layouts: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix,
+  Omarchy, Omarchy FX and Picture FX**. The last four are animated, with the
+  data on top: Matrix (falling glyphs); Omarchy (your
   `~/.config/omarchy/branding/screensaver.txt` art assembling with a different
-  effect each cycle, like the Omarchy screensaver) are animated, with the data
-  on top. The screen also follows the system palette automatically.
+  effect each cycle, like the Omarchy screensaver); Omarchy FX (the CPU/GPU/RAM
+  rows assembling with those effects); and Picture FX (a picture you choose in
+  Themes → Picture FX → **Choose picture…**, turned into block art with the same
+  effects; only the block art is kept, not a copy of the picture). The screen also follows the system palette automatically.
 - Animation FPS in Display: Auto (recommended), 4, 8, 15 or 30, for the visuals
   and the animated layouts only; static layouts send one frame a second. Auto
   runs Omarchy at 15 while the art assembles and 2 while it holds, Matrix at

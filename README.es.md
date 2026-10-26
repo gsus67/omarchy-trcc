@@ -23,7 +23,7 @@ Las pestañas del panel (Inicio está arriba; Consumo, en [Compatibilidad](#comp
   </tr>
 </table>
 
-Los ocho diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
+Los diseños propios tal como los muestra la Trofeo (1280×480, aquí a la mitad):
 
 <table>
   <tr>
@@ -46,6 +46,11 @@ Los ocho diseños propios tal como los muestra la Trofeo (1280×480, aquí a la 
     <td><img src="assets/gallery/lcd-omarchy.png" alt="Omarchy" width="400"></td>
   </tr>
   <tr><td align="center">Matrix</td><td align="center">Omarchy</td></tr>
+  <tr>
+    <td><img src="assets/gallery/lcd-fx.png" alt="Omarchy FX" width="400"></td>
+    <td></td>
+  </tr>
+  <tr><td align="center">Omarchy FX</td><td></td></tr>
 </table>
 
 ## Funciones
@@ -56,7 +61,7 @@ Los ocho diseños propios tal como los muestra la Trofeo (1280×480, aquí a la 
 - Pestaña Temas con lista compacta y una sola vista previa desplegable que sigue los datos en vivo; ver un tema no lo aplica.
 - Pestaña Consumo en PCs de escritorio sin fuente con sensor: estima el resto del PC (placa, RAM, discos, ventiladores, refrigeración, RGB) y la pérdida de la fuente.
 - Importación de imágenes 1280×480 y temas JSON con métricas; puedes quitar las copias importadas sin borrar tus originales.
-- Ocho diseños nativos: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix y Omarchy**. Matrix (lluvia de caracteres) y Omarchy (tu logo de `~/.config/omarchy/branding/screensaver.txt` armándose con un efecto distinto en cada ciclo, como el protector de pantalla de Omarchy) son animados, con los datos encima. La pantalla también sigue automáticamente la paleta del sistema.
+- Diez diseños nativos: **Focus, Terminal, Rings, Dots, Gauges, Clock, Matrix, Omarchy, Omarchy FX y Picture FX**. Los cuatro últimos son animados, con los datos encima: Matrix (lluvia de caracteres); Omarchy (tu logo de `~/.config/omarchy/branding/screensaver.txt` armándose con un efecto distinto en cada ciclo, como el protector de pantalla de Omarchy); Omarchy FX (las filas de CPU/GPU/RAM armándose con esos efectos); y Picture FX (una imagen que eliges en Temas → Picture FX → **Elegir imagen…**, convertida en arte de bloques con los mismos efectos; solo se guarda el arte de bloques, no una copia de la imagen). La pantalla también sigue automáticamente la paleta del sistema.
 - FPS de animación en Pantalla: Auto (recomendado), 4, 8, 15 o 30, solo para los visuales y los diseños animados; los estáticos envían un fotograma por segundo. Auto pone Omarchy a 15 mientras el logo se arma y a 2 mientras está quieto, Matrix a 10, los visuales a 15 con sonido y a 4 en silencio, y 4 siempre que la CPU está ocupada.
 - Temperatura de CPU, GPU y RAM con carga y vatios, frecuencia de la CPU, VRAM y RAM en uso, consumo total, fecha y reloj. Un sensor no disponible se muestra como `—`.
 - Brillo por software, giro de 0/90/180/270°, métricas sobre los visuales y modo juego (vuelve al panel de métricas con CPU >75%).

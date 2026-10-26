@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFont>
 #include <QFontMetricsF>
+#include <QImage>
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QStringList>
@@ -53,6 +54,50 @@ inline bool drawBlock(QPainter &painter, const QRectF &cell, QChar ch, const QCo
         if (bits & 8) fill(.5, .5, .5, .5);
     }
     return true;
+}
+
+// A picture as half-block art for LogoScene: each character holds two pixels
+// (▀ top, ▄ bottom, █ both), dithered (Floyd–Steinberg) around the image's
+// mean brightness. Bright pixels are drawn; transparent ones never are. At
+// most 160 columns × 40 rows, keeping the picture's proportions.
+inline QStringList imageToBlocks(const QImage &source) {
+    if (source.isNull() || source.width() < 1 || source.height() < 1) return {};
+    int columns = 160, rows = std::max(1, int(std::ceil(columns * double(source.height()) / source.width() / 2)));
+    if (rows > 40) { rows = 40; columns = std::max(1, int(rows * 2.0 * source.width() / source.height())); }
+    QImage small = source.convertToFormat(QImage::Format_ARGB32).scaled(columns, rows * 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    QVector<double> gray(columns * rows * 2), alpha(columns * rows * 2);
+    double sum = 0;
+    for (int y = 0; y < rows * 2; ++y)
+        for (int x = 0; x < columns; ++x) {
+            QRgb pixel = small.pixel(x, y);
+            gray[y * columns + x] = qGray(pixel) / 255.0; alpha[y * columns + x] = qAlpha(pixel) / 255.0;
+            sum += gray[y * columns + x];
+        }
+    double threshold = sum / gray.size();
+    QVector<bool> on(gray.size());
+    for (int y = 0; y < rows * 2; ++y)
+        for (int x = 0; x < columns; ++x) {
+            int i = y * columns + x;
+            double value = std::clamp(gray[i], 0.0, 1.0);
+            on[i] = alpha[i] >= 0.5 && value > threshold;
+            double error = value - (value > threshold ? 1.0 : 0.0);
+            if (x + 1 < columns) gray[i + 1] += error * 7 / 16;
+            if (y + 1 < rows * 2) {
+                if (x > 0) gray[i + columns - 1] += error * 3 / 16;
+                gray[i + columns] += error * 5 / 16;
+                if (x + 1 < columns) gray[i + columns + 1] += error * 1 / 16;
+            }
+        }
+    QStringList lines;
+    for (int r = 0; r < rows; ++r) {
+        QString line;
+        for (int x = 0; x < columns; ++x) {
+            bool top = on[(r * 2) * columns + x], bottom = on[(r * 2 + 1) * columns + x];
+            line += top && bottom ? QChar(0x2588) : top ? QChar(0x2580) : bottom ? QChar(0x2584) : QChar(' ');
+        }
+        lines << line;
+    }
+    return lines;
 }
 
 // Falling glyph columns across the whole 1280×480 screen.

@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QImage>
+#include <QImageReader>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -40,9 +41,9 @@
 #include "themes.hpp"
 
 static constexpr int W = 1280, H = 480;
-static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy", "fx"};
+static const QStringList layouts = {"focus", "terminal", "rings", "dots", "gauges", "clock", "matrix", "omarchy", "fx", "picture"};
 // Layouts with a moving background: drawn at the chosen frame rate, like the visuals.
-static const QStringList animatedLayouts = {"matrix", "omarchy", "fx"};
+static const QStringList animatedLayouts = {"matrix", "omarchy", "fx", "picture"};
 // Frame rates offered for animations; 0 = auto (recommended), see Engine::frameRate().
 static const QList<int> frameRates = {0, 4, 8, 15, 30};
 static const QStringList visualIds = {"bars", "wave", "rings", "particles"};
@@ -486,6 +487,8 @@ public:
     scenes::LogoScene logo;
     // Omarchy FX: the metric rows assembling with the screensaver effects.
     scenes::LogoScene fx;
+    // Picture FX: the user's picture as block art with the same effects.
+    scenes::LogoScene picture;
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
@@ -507,6 +510,8 @@ public:
         settings["estimate"] = cleanEstimate(settings["estimate"].toObject());
         if (!frameRates.contains(settings["fps"].toInt(-1))) settings["fps"] = 0;
         logo.setSource(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omarchy/branding/screensaver.txt");
+        // Until a picture is chosen, Picture FX shows the Omarchy art.
+        picture.lines = logo.lines; picture.setSource(stateDir + "/picture.txt");
         metrics.estimate = settings["estimate"].toObject();
         palette.load(); metrics.sample();
         QObject::connect(&audio, &QProcess::readyReadStandardOutput, [&] {
@@ -697,6 +702,8 @@ public:
                 painter.fillRect(QRectF(0,0,W,82), band); painter.fillRect(QRectF(0,405,W,75), band);
             } else if (layout == "omarchy")
                 logo.draw(painter, {40,92,1200,240}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
+            else if (layout == "picture")
+                picture.draw(painter, {40,88,1200,250}, palette.font, palette.foreground, palette.accent, palette.muted, preview);
             else if (layout == "fx") {
                 // Fixed-width rows so columns line up while the effect assembles them.
                 QStringList rows;
@@ -730,7 +737,7 @@ public:
                     text(painter,{480,y,200,60},data[i].value,40,palette.foreground,true);
                     text(painter,{680,y,290,60},data[i].detail,22,palette.muted);
                 }
-            } else if (layout == "omarchy") {
+            } else if (layout == "omarchy" || layout == "picture") {
                 QStringList parts;
                 for (const Field &field : data) parts << field.label + "  " + field.value + (field.detail.isEmpty() ? QString() : "  " + field.detail);
                 text(painter,{40,345,1200,50},parts.join(QString::fromUtf8("     ·     ")),22,palette.foreground,false,Qt::AlignCenter);
@@ -801,7 +808,7 @@ public:
             else liveFile.cancelWriting();
         }
         QJsonArray themes, visuals;
-        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy", "Omarchy FX"};
+        const QStringList names = {"Focus", "Terminal", "Rings", "Dots", "Gauges", "Clock", "Matrix", "Omarchy", "Omarchy FX", "Picture FX"};
         for(int i=0;i<layouts.size();++i) themes.append(QJsonObject{{"name",names[i]},{"path",layouts[i]},{"custom",false}, {"preview",QUrl::fromLocalFile(stateDir+"/previews/"+layouts[i]+".png").toString()}});
         for(const auto &theme:customThemes.all()) themes.append(QJsonObject{{"name",theme.name},{"path",theme.id},{"custom",true},{"preview",QUrl::fromLocalFile(stateDir+"/previews/"+theme.id+".png").toString()}});
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
@@ -863,6 +870,10 @@ public:
         } else if(op=="fps") {
             bool ok; int n=value=="auto"?0:value.toInt(&ok); if(value=="auto") ok=true;
             if(!ok||!frameRates.contains(n)) return invalid(); settings["fps"]=n;
+        } else if(op=="picture"&&args.size()==1) {
+            // Only the converted block art is kept, never a copy of the picture.
+            QString error=pictureFrom(value); if(!error.isEmpty()) return {{"ok",false},{"message",error}};
+            settings["layout"]="picture"; settings["visual"]=""; previews();
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
         } else if(op=="reconnect") { usb.close(); lastConnect=0; }
@@ -889,7 +900,28 @@ public:
         if(!visual().isEmpty()) return *std::max_element(levels.begin(),levels.end())<.02?4:15;
         if(settings["layout"].toString()=="omarchy") return logo.animating()?15:2;
         if(settings["layout"].toString()=="fx") return fx.animating()?15:2;
+        if(settings["layout"].toString()=="picture") return picture.animating()?15:2;
         return 10;
+    }
+    // Reads a PNG/JPG/WebP (≤ 20 MB, ≤ 10000 px a side, ≤ 64 MB decoded) and
+    // stores it as block art in picture.txt. Returns an error message or "".
+    QString pictureFrom(const QString &path) {
+        QFileInfo input(path);
+        if(!input.isFile()) return uiText("No se encontró el archivo seleccionado.");
+        if(input.size()>20*1024*1024) return uiText("El archivo supera 20 MB.");
+        if(!QStringList{"png","jpg","jpeg","webp"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP.");
+        QImageReader reader(input.canonicalFilePath());
+        reader.setAllocationLimit(64);
+        QSize size=reader.size();
+        if(!size.isValid()||size.width()>10000||size.height()>10000) return uiText("No se pudo leer la imagen.");
+        QStringList art=scenes::imageToBlocks(reader.read());
+        if(art.isEmpty()) return uiText("No se pudo leer la imagen.");
+        QSaveFile file(stateDir+"/picture.txt");
+        if(!file.open(QIODevice::WriteOnly)) return uiText("No se pudo guardar la imagen.");
+        file.write(art.join('\n').toUtf8());
+        if(!file.commit()) return uiText("No se pudo guardar la imagen.");
+        picture.setSource(stateDir+"/picture.txt");
+        return {};
     }
     void tick() {
         qint64 now=QDateTime::currentMSecsSinceEpoch();
@@ -928,6 +960,7 @@ public:
         if(active.isEmpty()&&layout=="matrix") rain.step();
         if(active.isEmpty()&&layout=="omarchy") logo.step(frameMs/1000.0);
         if(active.isEmpty()&&layout=="fx") fx.step(frameMs/1000.0);
+        if(active.isEmpty()&&layout=="picture") picture.step(frameMs/1000.0);
         QImage image=render(settings["layout"].toString(),active);
         if(!offline&&usb.connected()&&usb.send(image,settings["orientation"].toInt())) ++framesSent;
         lastFrame=now;
@@ -993,6 +1026,23 @@ int main(int argc,char **argv) {
         for(int i=0;i<40;++i) { engine.rain.step(); engine.logo.step(.25); engine.fx.step(.25); }
         ok=ok&&!engine.render("matrix","").isNull()&&!engine.render("omarchy","").isNull()&&!engine.render("omarchy","",true).isNull();
         ok=ok&&!engine.render("fx","").isNull()&&engine.fx.lines.size()==3&&engine.fx.lines[0].startsWith("CPU");
+        // Picture FX: a picture becomes block art within 160×40; bad input is refused.
+        {
+            QImage photo(400,200,QImage::Format_RGB32); photo.fill(Qt::black);
+            QPainter pp(&photo); pp.setBrush(Qt::white); pp.drawEllipse(QPointF(200,100),80,80); pp.end();
+            QString png=testState.path()+"/photo.png"; ok=photo.save(png)&&ok;
+            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.settings["layout"]=="picture";
+            QFile storedFile(engine.stateDir+"/picture.txt"); ok=storedFile.open(QIODevice::ReadOnly)&&ok;
+            QStringList stored=QString::fromUtf8(storedFile.readAll()).split('\n');
+            ok=ok&&stored.size()==40&&stored[20].size()==160&&stored[20].contains(QChar(0x2588))&&!stored[0].contains(QChar(0x2588));
+            ok=ok&&engine.picture.lines.size()>0&&engine.picture.lines.size()<40&&engine.picture.lines.join("").contains(QChar(0x2588));
+            ok=ok&&QFileInfo::exists(engine.stateDir+"/picture.txt")&&!engine.render("picture","").isNull();
+            QFile fake(testState.path()+"/fake.png"); ok=fake.open(QIODevice::WriteOnly)&&ok; fake.write("not an image"); fake.close();
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{fake.fileName()}}})["ok"].toBool();
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{testState.path()+"/missing.png"}}})["ok"].toBool();
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{testState.path()+"/art.txt"}}})["ok"].toBool();
+            engine.settings["layout"]="focus";
+        }
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;
         engine.settings["layout"]="matrix"; ok=ok&&engine.tickInterval()==66;
         engine.settings["layout"]="focus"; ok=ok&&engine.tickInterval()==125;

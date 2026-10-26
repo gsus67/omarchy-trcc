@@ -179,6 +179,20 @@ Panel {
   }
 
   Dialogs.FileDialog {
+    id: pictureDialog
+    title: root.t("Imagen para Picture FX")
+    fileMode: Dialogs.FileDialog.OpenFile
+    nameFilters: [root.t("Imágenes (*.png *.jpg *.jpeg *.webp)")]
+    onAccepted: {
+      var filePath = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
+      root.run(["picture", filePath])
+      root.expandedTheme = "picture"
+      root.page = "themes"
+      root.open()
+    }
+    onRejected: { root.page = "themes"; root.open() }
+  }
+  Dialogs.FileDialog {
     id: importDialog
     title: root.t("Añadir tema a Omarchy TRCC")
     fileMode: Dialogs.FileDialog.OpenFile
@@ -654,6 +668,13 @@ Panel {
                   text: root.t("Aplicar en la Trofeo")
                   enabled: !root.busy
                   onClicked: root.run(["theme", root.expandedTheme])
+                }
+                // Picture FX: the picture becomes block art; the original is not copied.
+                Button {
+                  text: root.t("Elegir imagen…")
+                  visible: root.expandedTheme === "picture"
+                  enabled: !root.busy
+                  onClicked: { root.close(); pictureDialog.open() }
                 }
                 Button {
                   text: root.t("Quitar copia")

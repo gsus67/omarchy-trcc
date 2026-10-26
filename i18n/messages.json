@@ -101,7 +101,7 @@
     "disco duro": "hard drive",
     "Nada detectado": "Nothing detected",
     "Módulos de RAM": "RAM modules",
-    "Ventiladores con RGB": "RGB fans",
+    "Ventiladores con RGB": "Fans with RGB",
     "Otros RGB (tiras, etc.)": "Other RGB (strips, etc.)",
     "PLACA BASE": "MOTHERBOARD",
     "REFRIGERACIÓN": "COOLING",
@@ -113,6 +113,6 @@
     "Resto del PC": "Rest of the PC",
     "Total en el enchufe": "Total at the wall",
     "Ventiladores sin RGB": "Fans without RGB",
-    "Sumar estimado": "Add estimate"
+    "≈ Incluir en el total": "≈ Include in total"
   }
 }

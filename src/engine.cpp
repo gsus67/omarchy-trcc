@@ -46,6 +46,29 @@ static QString readText(const QString &path) {
     if (!file.open(QIODevice::ReadOnly)) return {};
     return QString::fromUtf8(file.readAll()).trimmed();
 }
+// Rough watts for what has no power sensor on a desktop. Detected parts use
+// these per unit; the rest comes from the "Consumo" tab.
+static const QHash<QString, double> boardWatts = {{"itx", 20}, {"matx", 25}, {"atx", 30}, {"eatx", 40}};
+static const QHash<QString, double> coolerWatts = {{"air", 0}, {"pump", 5}, {"pumpRgb", 7}};
+// 80 PLUS efficiency at half load (115 V); "none" counts no PSU loss.
+static const QHash<QString, double> psuEfficiency = {{"none", 1}, {"80plus", .80}, {"bronze", .85}, {"silver", .88},
+                                                     {"gold", .90}, {"platinum", .92}, {"titanium", .94}};
+static constexpr double ddr5Watts = 4, ddr4Watts = 3, nvmeWatts = 4, ssdWatts = 2, hddWatts = 6, fanWatts = 1.5, fanRgbWatts = 1.5;
+static const QJsonObject defaultEstimate = {{"enabled", false}, {"board", "atx"}, {"fans", 3}, {"rgbFans", 0},
+                                            {"cooler", "air"}, {"rgbWatts", 0}, {"psu", "none"}, {"dimms", 2}};
+// Known keys with valid values; anything else falls back to the default.
+static QJsonObject cleanEstimate(const QJsonObject &stored) {
+    QJsonObject out = defaultEstimate;
+    auto number = [&](const char *key, int low, int high) {
+        if (stored[key].isDouble() && stored[key].toInt() >= low && stored[key].toInt() <= high) out[key] = stored[key].toInt();
+    };
+    if (stored["enabled"].isBool()) out["enabled"] = stored["enabled"];
+    if (boardWatts.contains(stored["board"].toString())) out["board"] = stored["board"];
+    if (coolerWatts.contains(stored["cooler"].toString())) out["cooler"] = stored["cooler"];
+    if (psuEfficiency.contains(stored["psu"].toString())) out["psu"] = stored["psu"];
+    number("fans", 0, 20); number("rgbFans", 0, 20); number("rgbWatts", 0, 200); number("dimms", 0, 8);
+    return out;
+}
 // The plugin version from its manifest, so the LCD never shows a stale one.
 static QString pluginVersion() {
     QString dir = qEnvironmentVariable("OMARCHY_TRCC_PLUGIN_DIR");
@@ -216,6 +239,12 @@ struct Metrics {
     // Watts; -1 = no sensor. powerSource: "psu", "battery", "components" or "".
     double cpuPower = -1, gpuPower = -1, power = -1;
     QString powerSource; bool powerPartial = false;
+    // Desktop estimate: parts found in sysfs, the "Consumo" tab settings and
+    // the results. estimateAvailable = no battery and no PSU sensor.
+    QJsonObject estimate = defaultEstimate;
+    int dimms = 0, nvmes = 0, ssds = 0, hdds = 0; QString ddr;
+    bool estimateAvailable = false, powerEstimated = false;
+    double ramPower = -1, extraPower = -1;
     QString sysRoot = "/sys", procRoot = "/proc", runRoot = "/run", nvmlLibrary = "libnvidia-ml.so.1";
     quint64 previousTotal = 0, previousIdle = 0;
     // Energy counters (µJ) by path, to turn them into watts between samples.
@@ -299,7 +328,7 @@ struct Metrics {
         }
         cpuGHz = clocks ? clockSum / clocks / 1e6 : -1;
         if (cpuMaxGHz <= 0) cpuMaxGHz = -1;
-        cpuTemp = -1; ramTemp = -1;
+        cpuTemp = -1; ramTemp = -1; dimms = 0; ddr.clear();
         double psuPower = -1;
         QList<Gpu> gpus;
         QString hwmonDir = sysRoot + "/class/hwmon";
@@ -331,6 +360,7 @@ struct Metrics {
             // Corsair HXi/RMi report the real delivered power over USB.
             if (driver == "corsairpsu" && psuPower < 0) psuPower = hwmonPower(path);
             if(driver=="spd5118"||driver=="jc42") {
+                ++dimms; ddr = driver == "spd5118" ? "DDR5" : "DDR4";
                 QString value=readText(path+"/temp1_input");
                 if(!value.isEmpty()) ramTemp=std::max(ramTemp,value.toDouble()/1000.0);
             }
@@ -373,18 +403,38 @@ struct Metrics {
                 : readText(path + "/current_now").toDouble() * readText(path + "/voltage_now").toDouble() / 1e12;
             if (watts > 0) batteryPower = std::max(0.0, batteryPower) + watts;
         }
-        powerPartial = false;
+        // Drives: NVMe controllers, and internal SATA disks (USB ones are skipped).
+        nvmes = QDir(sysRoot + "/class/nvme").entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System).size();
+        ssds = 0; hdds = 0;
+        for (const QString &disk : QDir(sysRoot + "/block").entryList({"sd*"}, QDir::Dirs | QDir::System)) {
+            QString path = sysRoot + "/block/" + disk;
+            if (readText(path + "/removable") == "1" || QFileInfo(path).canonicalFilePath().contains("/usb")) continue;
+            ++(readText(path + "/queue/rotational") == "1" ? hdds : ssds);
+        }
+        estimateAvailable = psuPower <= 0 && QDir(supplyDir).entryList({"BAT*"}, QDir::Dirs | QDir::System).isEmpty();
+        int modules = dimms > 0 ? dimms : estimate["dimms"].toInt();
+        ramPower = estimateAvailable && (dimms > 0 || estimate["enabled"].toBool()) ? modules * (ddr == "DDR4" ? ddr4Watts : ddr5Watts) : -1;
+        int fans = estimate["fans"].toInt();
+        extraPower = estimateAvailable ? std::max(0.0, ramPower) + nvmes * nvmeWatts + ssds * ssdWatts + hdds * hddWatts
+            + boardWatts.value(estimate["board"].toString()) + fans * fanWatts + std::min(fans, estimate["rgbFans"].toInt()) * fanRgbWatts
+            + coolerWatts.value(estimate["cooler"].toString()) + estimate["rgbWatts"].toInt() : -1;
+        powerPartial = false; powerEstimated = false;
         if (psuPower > 0) { power = psuPower; powerSource = "psu"; }
         else if (batteryPower > 0) { power = batteryPower; powerSource = "battery"; }
         else if (cpuPower >= 0 || gpuPower >= 0) {
             power = std::max(0.0, cpuPower) + std::max(0.0, gpuPower);
             powerSource = "components"; powerPartial = cpuPower < 0 || gpuPower < 0;
+            // The tab adds the rest of the PC and the PSU loss at the wall.
+            if (estimateAvailable && estimate["enabled"].toBool()) {
+                power = (power + extraPower) / psuEfficiency.value(estimate["psu"].toString(), 1);
+                powerSource = "estimate"; powerEstimated = true;
+            }
         } else { power = -1; powerSource.clear(); }
     }
-    // "45", "≥45" when a component is missing, "—" without sensors.
+    // "45", "≥45" when a component is missing, "≈45" when estimated, "—" without sensors.
     QString powerText() const {
         if (power < 0) return QString::fromUtf8("—");
-        return (powerPartial ? QString::fromUtf8("≥") : QString()) + QString::number(qRound(power));
+        return (powerPartial ? QString::fromUtf8("≥") : powerEstimated ? QString::fromUtf8("≈") : QString()) + QString::number(qRound(power));
     }
 };
 
@@ -429,7 +479,7 @@ public:
         customThemes.initialize(stateDir+"/themes");
         socketPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/omarchy-trcc.sock";
         settings = {{"brightness", 100}, {"orientation", 0}, {"layout", "focus"}, {"visual", ""},
-                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}};
+                    {"overlay", true}, {"game", false}, {"followAccent", true}, {"visualHue", 225}, {"estimate", defaultEstimate}};
         QJsonDocument stored = QJsonDocument::fromJson(readText(stateDir + "/settings.json").toUtf8());
         QJsonObject existing = stored.object();
         for (auto it = existing.begin(); it != existing.end(); ++it) if (settings.contains(it.key())) settings[it.key()] = it.value();
@@ -437,6 +487,8 @@ public:
         if (!visualIds.contains(settings["visual"].toString())) settings["visual"] = "";
         settings["brightness"] = std::clamp(settings["brightness"].toInt(100), 0, 100);
         if (!QList<int>{0, 90, 180, 270}.contains(settings["orientation"].toInt())) settings["orientation"] = 0;
+        settings["estimate"] = cleanEstimate(settings["estimate"].toObject());
+        metrics.estimate = settings["estimate"].toObject();
         palette.load(); metrics.sample();
         QObject::connect(&audio, &QProcess::readyReadStandardOutput, [&] {
             samples += audio.readAllStandardOutput();
@@ -488,7 +540,7 @@ public:
         p.setFont(font); p.setPen(color); p.drawText(rect, alignment, value);
     }
     // The rows every built-in layout shows: temperature as the value, then
-    // load and watts (RAM: use; its GiB are in the footer). ring = load for rings.
+    // load and watts (RAM: use and estimated watts). ring = load for rings.
     struct Field { QString label, value, detail; double ring; };
     QList<Field> fieldData() const {
         auto percent = [](double value) { return value < 0 ? QString() : QString::number(qRound(value)) + "%"; };
@@ -499,7 +551,10 @@ public:
         return {
             {"CPU", temperature(metrics.cpuTemp), join({percent(metrics.cpu), watts(metrics.cpuPower)}), metrics.cpu},
             {"GPU", temperature(metrics.gpuTemp), join({percent(metrics.gpu), watts(metrics.gpuPower)}), std::max(0., metrics.gpu)},
-            {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram), ramSensor ? percent(metrics.ram) : QString(), metrics.ram}};
+            {"RAM", ramSensor ? temperature(metrics.ramTemp) : percent(metrics.ram),
+                // Estimated module watts; without them, GiB in use so the row is never empty.
+                join({ramSensor ? percent(metrics.ram) : QString(), metrics.ramPower >= 0 ? QString::fromUtf8("≈") + watts(metrics.ramPower)
+                      : QString("%1 GiB").arg(metrics.ramUsedGiB,0,'f',1)}), metrics.ram}};
     }
     // Clock and memory in one line: "CPU 3.4 / 4.4 GHz", "GPU 1.0 / 16.0 GiB",
     // "RAM 4.1 / 31.2 GiB"; missing readings are left out.
@@ -669,13 +724,15 @@ public:
         const QMap<QString,QString> visualNames={{"bars",uiText("Barras")},{"wave",uiText("Onda")},{"rings",uiText("Anillos")},{"particles",uiText("Partículas")}};
         for(const QString &id:visualIds) visuals.append(QJsonObject{{"id",id},{"title",visualNames[id]},{"presets",QJsonArray{}}});
         QJsonObject state{{"brightness",settings["brightness"]},{"orientation",settings["orientation"]},
-            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]}};
+            {"current_theme",settings["layout"]},{"overlay_enabled",settings["overlay"]},{"game_enabled",settings["game"]},{"estimate",settings["estimate"]}};
         return {{"ok",true},{"key","0416:5302"},{"usbPresent",usb.connected()}, {"deviceError",usb.error},
             {"state",state},{"themes",themes},{"visuals",visuals},{"playing",visual()}, {"resolution","1280 × 480"},
             {"followAccent",settings["followAccent"]},{"preset",""},{"audioError",audioError},{"framesSent",qint64(framesSent)},
             {"livePreview",QUrl::fromLocalFile(stateDir+"/live.png").toString()},{"previewRevision",QString::number(QDateTime::currentMSecsSinceEpoch())},
             {"palette",QJsonObject{{"name",palette.name},{"accent",palette.accent.name()}}},
-            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuGHz",metrics.cpuGHz},{"cpuMaxGHz",metrics.cpuMaxGHz},{"vramUsedGiB",metrics.vramUsedGiB},{"vramTotalGiB",metrics.vramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial}}}};
+            {"metrics",QJsonObject{{"cpu",metrics.cpu},{"gpu",metrics.gpu},{"cpuTemp",metrics.cpuTemp},{"gpuTemp",metrics.gpuTemp},{"ramTemp",metrics.ramTemp},{"ram",metrics.ram},{"ramUsedGiB",metrics.ramUsedGiB},{"ramTotalGiB",metrics.ramTotalGiB},{"cpuGHz",metrics.cpuGHz},{"cpuMaxGHz",metrics.cpuMaxGHz},{"vramUsedGiB",metrics.vramUsedGiB},{"vramTotalGiB",metrics.vramTotalGiB},{"cpuPower",metrics.cpuPower},{"gpuPower",metrics.gpuPower},{"power",metrics.power},{"powerSource",metrics.powerSource},{"powerPartial",metrics.powerPartial},
+                {"powerEstimated",metrics.powerEstimated},{"estimateAvailable",metrics.estimateAvailable},{"ramPower",metrics.ramPower},{"extraPower",metrics.extraPower},
+                {"detected",QJsonObject{{"dimms",metrics.dimms},{"ddr",metrics.ddr},{"nvme",metrics.nvmes},{"ssd",metrics.ssds},{"hdd",metrics.hdds}}}}}};
     }
     QJsonObject command(const QJsonObject &request) {
         QString op=request["command"].toString(); QJsonArray args=request["args"].toArray();
@@ -706,6 +763,15 @@ public:
         } else if(op=="overlay"||op=="game"||op=="follow-accent") {
             if(value!="on"&&value!="off") return invalid();
             settings[op=="follow-accent"?"followAccent":op]=value=="on";
+        } else if(op=="estimate"&&args.size()==2) {
+            // estimate <key> <value>: on/off, a known choice or a number in range.
+            QString key=value, text=args[1].toString(); QJsonObject next=settings["estimate"].toObject();
+            if(key=="enabled") { if(text!="on"&&text!="off") return invalid(); next[key]=text=="on"; }
+            else if(key=="board"||key=="cooler"||key=="psu") next[key]=text;
+            else if(QStringList{"fans","rgbFans","rgbWatts","dimms"}.contains(key)) { bool ok; int n=text.toInt(&ok); if(!ok) return invalid(); next[key]=n; }
+            else return invalid();
+            if(cleanEstimate(next)!=next) return invalid();
+            settings["estimate"]=next; metrics.estimate=next; metrics.sample();
         } else if(op=="accent") {
             palette.load(); settings["visualHue"]=qRound(palette.accent.hsvHueF()*359);
         } else if(op=="reconnect") { usb.close(); lastConnect=0; }
@@ -865,6 +931,32 @@ int main(int argc,char **argv) {
         put("class/hwmon/hwmon3/name","xe"); put("class/hwmon/hwmon3/energy1_input","1000000"); m.sample(4000);
         put("class/hwmon/hwmon3/energy1_input","4000000"); m.sample(5000); ok=ok&&qFuzzyCompare(m.gpuPower,53.0);
         drop("class/hwmon/hwmon3/energy1_input");
+        // Desktop estimate: detected parts, the tab's choices and the PSU loss.
+        QTemporaryDir desk;
+        auto putDesk=[&](const QString &file,const QByteArray &value) {
+            QString path=desk.path()+"/"+file; QDir().mkpath(QFileInfo(path).path());
+            QFile out(path); if(!out.open(QIODevice::WriteOnly|QIODevice::Truncate)) ok=false; out.write(value);
+        };
+        putDesk("class/hwmon/hwmon0/name","spd5118"); putDesk("class/hwmon/hwmon1/name","spd5118");
+        putDesk("class/hwmon/hwmon2/name","amdgpu"); putDesk("class/hwmon/hwmon2/power1_input","100000000");
+        putDesk("run/omarchy-trcc-power/cpu-watts","20"); QDir().mkpath(desk.path()+"/class/nvme/nvme0");
+        putDesk("block/sda/removable","0"); putDesk("block/sda/queue/rotational","1");
+        Metrics d; d.sysRoot=desk.path(); d.procRoot=desk.path(); d.runRoot=desk.path()+"/run";
+        // Off: RAM watts already show, the total stays CPU + GPU.
+        d.sample(); ok=ok&&d.estimateAvailable&&d.dimms==2&&d.ddr=="DDR5"&&d.nvmes==1&&d.hdds==1&&d.ssds==0&&qFuzzyCompare(d.ramPower,8.0)&&d.powerText()=="120";
+        // On: 8 RAM + 4 NVMe + 6 HDD + 30 ATX + 3 fans 4.5 + 2 RGB 3 + pump 5 + 10 RGB = 70.5 W; Gold 90 %.
+        d.estimate=QJsonObject{{"enabled",true},{"board","atx"},{"fans",3},{"rgbFans",2},{"cooler","pump"},{"rgbWatts",10},{"psu","gold"},{"dimms",2}};
+        d.sample(); ok=ok&&qFuzzyCompare(d.extraPower,70.5)&&d.powerSource=="estimate"&&d.powerText()==QString::fromUtf8("≈212");
+        // A battery (laptop) turns the estimate off.
+        QDir().mkpath(desk.path()+"/class/power_supply/BAT0");
+        d.sample(); ok=ok&&!d.estimateAvailable&&d.ramPower<0&&d.powerText()=="120";
+        ok=ok&&engine.command({{"command","estimate"},{"args",QJsonArray{"fans","4"}}})["ok"].toBool()&&engine.settings["estimate"].toObject()["fans"].toInt()==4;
+        ok=ok&&engine.command({{"command","estimate"},{"args",QJsonArray{"psu","gold"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","estimate"},{"args",QJsonArray{"fans","99"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","estimate"},{"args",QJsonArray{"psu","diamond"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","estimate"},{"args",QJsonArray{"enabled","yes"}}})["ok"].toBool();
+        ok=ok&&!engine.command({{"command","estimate"},{"args",QJsonArray{"x","1"}}})["ok"].toBool();
+        ok=ok&&cleanEstimate(QJsonObject{{"fans",-1},{"board","huge"},{"psu","gold"}})["fans"].toInt()==3&&cleanEstimate(QJsonObject{{"psu","gold"}})["psu"]=="gold";
         // NVIDIA proprietary driver through NVML (fake library from the build).
         QString fakeNvml=qEnvironmentVariable("TROFEO_TEST_NVML");
         if(!fakeNvml.isEmpty()) {

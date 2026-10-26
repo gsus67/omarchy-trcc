@@ -35,6 +35,27 @@ jobs:
       - name: Plugin manifest
         run: python -c "import json; json.load(open('manifest.json'))"
 
+  sanitizers:
+    name: Sanitizers (ASan + UBSan)
+    runs-on: ubuntu-latest
+    container: archlinux:base-20261018.0.612668@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
+    steps:
+      - name: Install build tools
+        # Arch mirrors sometimes drop a download; retry before failing.
+        run: |
+          for attempt in 1 2 3; do
+            pacman -Syu --noconfirm --needed gcc pkgconf qt6-base libusb python ttf-dejavu && exit 0
+            sleep 15
+          done
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The engine parses imported themes, sysfs and USB replies: memory errors,
+      # leaks or undefined behaviour in the self-tests fail the job.
+      - name: Native self-tests under AddressSanitizer and UndefinedBehaviorSanitizer
+        run: python native_build.py --test --sanitize
+
   service-hardening:
     name: Service hardening
     runs-on: ubuntu-latest

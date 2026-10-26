@@ -298,6 +298,7 @@ Panel {
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             Text {
+              textFormat: Text.PlainText
               readonly property var readings: root.deviceData.metrics || ({})
               function watts(value) { return value === undefined || value < 0 ? "—" : Math.round(value) + " W" }
               width: parent.width

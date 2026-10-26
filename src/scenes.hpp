@@ -409,7 +409,8 @@ private:
     void csi(ushort final) {
         QStringList parts = params.split(';');
         int n = std::max(1, parts.value(0).toInt());
-        if (final == 'A') row -= n; else if (final == 'B') row += n;
+        // A terminal never moves the cursor above the first row; ttfx relies on it.
+        if (final == 'A') row = std::max(0, row - n); else if (final == 'B') row += n;
         else if (final == 'C') col += n; else if (final == 'D') col = std::max(0, col - n);
         else if (final == 'm') {
             for (int i = 0; i < parts.size(); ++i) {

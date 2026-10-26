@@ -491,6 +491,8 @@ public:
     scenes::LogoScene picture;
     // ttfx running for one of the three layouts above ("" when idle).
     scenes::TtfxScene ttfx; QString ttfxFor;
+    // Omarchy's image-to-text tool ("" = use the built-in conversion).
+    QString transcoder = QStandardPaths::findExecutable("omarchy-transcode-ascii");
     qint64 lastSample = 0, lastConnect = 0, lastFrame = 0, lastAudioRetry = 0;
     QString audioError;
     quint64 framesSent = 0;
@@ -912,14 +914,33 @@ public:
         if(layout=="picture") return picture.animating()?15:2;
         return 10;
     }
-    // Reads a PNG/JPG/WebP (≤ 20 MB, ≤ 10000 px a side, Qt's 256 MB decode cap),
-    // decoded straight at a small size (JPEG scales while decoding), and
-    // stores it as block art in picture.txt. Returns an error message or "".
+    // Turns a picture (≤ 20 MB) into text art in picture.txt, the same way
+    // `omarchy branding screensaver image` does: Omarchy's own
+    // omarchy-transcode-ascii (ImageMagick, braille). Without it, a built-in
+    // block conversion of PNG/JPG/WebP. Returns an error message or "".
     QString pictureFrom(const QString &path) {
         QFileInfo input(path);
         if(!input.isFile()) return uiText("No se encontró el archivo seleccionado.");
         if(input.size()>20*1024*1024) return uiText("El archivo supera 20 MB.");
-        if(!QStringList{"png","jpg","jpeg","webp"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP.");
+        if(!QStringList{"png","jpg","jpeg","webp","svg"}.contains(input.suffix().toLower())) return uiText("Selecciona una imagen PNG/JPG/WebP/SVG.");
+        if(!transcoder.isEmpty()) {
+            QString staging=stateDir+"/picture.new.txt";
+            QFile::remove(staging);
+            QProcess convert; convert.setProcessChannelMode(QProcess::MergedChannels);
+            convert.start(transcoder,{input.canonicalFilePath(),staging,"--width","150","--height","40"});
+            bool done=convert.waitForFinished(30000);
+            if(!done) { convert.kill(); convert.waitForFinished(1000); }
+            QFileInfo result(staging);
+            if(!done||convert.exitCode()!=0||!result.isFile()||result.size()==0||result.size()>65536) {
+                QFile::remove(staging);
+                return uiText("No se pudo convertir la imagen (prueba un PNG o SVG con fondo transparente).");
+            }
+            QFile::remove(stateDir+"/picture.txt");
+            if(!QFile::rename(staging,stateDir+"/picture.txt")) return uiText("No se pudo guardar la imagen.");
+            picture.setSource(stateDir+"/picture.txt");
+            return {};
+        }
+        if(input.suffix().toLower()=="svg") return uiText("Selecciona una imagen PNG/JPG/WebP.");
         QImageReader reader(input.canonicalFilePath());
         reader.setAllocationLimit(256);
         QSize size=reader.size();
@@ -1064,6 +1085,7 @@ int main(int argc,char **argv) {
             QImage photo(400,200,QImage::Format_RGB32); photo.fill(Qt::black);
             QPainter pp(&photo); pp.setBrush(Qt::white); pp.drawEllipse(QPointF(200,100),80,80); pp.end();
             QString png=testState.path()+"/photo.png"; ok=photo.save(png)&&ok;
+            engine.transcoder.clear();  // the built-in conversion; CI has no Omarchy
             ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.settings["layout"]=="picture";
             QFile storedFile(engine.stateDir+"/picture.txt"); ok=storedFile.open(QIODevice::ReadOnly)&&ok;
             QStringList stored=QString::fromUtf8(storedFile.readAll()).split('\n');
@@ -1074,6 +1096,15 @@ int main(int argc,char **argv) {
             ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{fake.fileName()}}})["ok"].toBool();
             ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{testState.path()+"/missing.png"}}})["ok"].toBool();
             ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{testState.path()+"/art.txt"}}})["ok"].toBool();
+            // Omarchy's transcoder path: its output becomes the art; a failure keeps the old art.
+            QString fakeTool=testState.path()+"/fake-transcode";
+            QFile tool(fakeTool); ok=tool.open(QIODevice::WriteOnly)&&ok;
+            tool.write("#!/bin/sh\nprintf 'XY\\n' > \"$2\"\n"); tool.close();
+            tool.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner|QFileDevice::ExeOwner);
+            engine.transcoder=fakeTool;
+            ok=ok&&engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
+            ok=tool.open(QIODevice::WriteOnly|QIODevice::Truncate)&&ok; tool.write("#!/bin/sh\nexit 1\n"); tool.close();
+            ok=ok&&!engine.command({{"command","picture"},{"args",QJsonArray{png}}})["ok"].toBool()&&engine.picture.lines==QStringList{"XY"};
             engine.settings["layout"]="focus";
         }
         ok=ok&&engine.command({{"command","fps"},{"args",QJsonArray{"15"}}})["ok"].toBool()&&engine.settings["fps"].toInt()==15;

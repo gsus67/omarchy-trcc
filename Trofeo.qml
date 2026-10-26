@@ -182,7 +182,7 @@ Panel {
     id: pictureDialog
     title: root.t("Imagen para Picture FX")
     fileMode: Dialogs.FileDialog.OpenFile
-    nameFilters: [root.t("Imágenes (*.png *.jpg *.jpeg *.webp)")]
+    nameFilters: [root.t("Imágenes (*.png *.svg *.jpg *.jpeg *.webp)")]
     onAccepted: {
       var filePath = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
       root.run(["picture", filePath])

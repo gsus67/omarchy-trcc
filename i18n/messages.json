@@ -124,9 +124,11 @@
     "Solo para los visuales y los temas animados (Matrix, Omarchy). Auto sube los FPS mientras hay movimiento y los baja en pausas, en silencio o con la CPU ocupada. Más FPS, más fluido y más CPU.": "Only for the visuals and the animated themes (Matrix, Omarchy). Auto raises the FPS while things move and lowers them during pauses, silence or a busy CPU. More FPS is smoother and uses more CPU.",
     "Elegir imagen…": "Choose picture…",
     "Imagen para Picture FX": "Picture for Picture FX",
-    "Imágenes (*.png *.jpg *.jpeg *.webp)": "Images (*.png *.jpg *.jpeg *.webp)",
     "Selecciona una imagen PNG/JPG/WebP.": "Select a PNG/JPG/WebP image.",
     "No se pudo leer la imagen.": "Could not read the image.",
-    "No se pudo guardar la imagen.": "Could not save the image."
+    "No se pudo guardar la imagen.": "Could not save the image.",
+    "Imágenes (*.png *.svg *.jpg *.jpeg *.webp)": "Images (*.png *.svg *.jpg *.jpeg *.webp)",
+    "Selecciona una imagen PNG/JPG/WebP/SVG.": "Select a PNG/JPG/WebP/SVG image.",
+    "No se pudo convertir la imagen (prueba un PNG o SVG con fondo transparente).": "Could not convert the image (try a PNG or SVG with a transparent background)."
   }
 }

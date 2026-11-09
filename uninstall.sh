@@ -6,6 +6,8 @@ elif [[ $# -gt 0 ]]; then echo "Uso: bash uninstall.sh [--purge]" >&2; exit 2; f
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}"
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}"
 runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+# Stop the resume watcher first so it cannot restart the engine.
+systemctl --user disable --now omarchy-trcc-resume.service 2>/dev/null || true
 systemctl --user disable --now omarchy-trcc.service 2>/dev/null || true
 # The plugin id was omarchy-trcc before v0.0.6.
 for id in io.github.gsus67.omarchy-trcc omarchy-trcc; do
@@ -14,10 +16,10 @@ for id in io.github.gsus67.omarchy-trcc omarchy-trcc; do
     omarchy plugin remove "$id" --yes
   fi
 done
-rm -f "$config_root/systemd/user/omarchy-trcc.service"
+rm -f "$config_root/systemd/user/omarchy-trcc.service" "$config_root/systemd/user/omarchy-trcc-resume.service"
 systemctl --user daemon-reload
 rm -f "$runtime/omarchy-trcc.sock" "$runtime/omarchy-trcc.sock.lock"
-rm -f "$state_root/omarchy-trcc/bin/trofeo-engine" "$state_root/omarchy-trcc/.engine-version" "$state_root/omarchy-trcc/.bootstrap.lock"
+rm -f "$state_root/omarchy-trcc/bin/trofeo-engine" "$state_root/omarchy-trcc/bin/omarchy-trcc-resume-watch.sh" "$state_root/omarchy-trcc/.engine-version" "$state_root/omarchy-trcc/.bootstrap.lock"
 rmdir "$state_root/omarchy-trcc/bin" 2>/dev/null || true
 if $purge; then
   rm -rf -- "$state_root/omarchy-trcc"

@@ -260,6 +260,10 @@ The install uses only:
 
 - `~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/` (checkout managed by Omarchy)
 - `~/.config/systemd/user/omarchy-trcc.service` and its enable link
+- `~/.config/systemd/user/omarchy-trcc-resume.service` and its enable link, plus
+  `~/.local/state/omarchy-trcc/bin/omarchy-trcc-resume-watch.sh`: restarts the
+  engine after waking from suspend. Resetting the display needs `usbreset`
+  (package `usbutils`)
 - An `io.github.gsus67.omarchy-trcc` entry in the bar in `shell.json`
 - `~/.local/state/omarchy-trcc/` for settings, imported themes, previews and a
   single live image that gets overwritten

@@ -17,6 +17,10 @@ class BootstrapCleanupTests(unittest.TestCase):
             (source / "native_build.py").write_text("# build recipe")
             (source / "src/engine.cpp").write_text("// source")
             (source / "i18n/messages.json").write_text("{}")
+            (source / "bin").mkdir()
+            (source / "bin/omarchy-trcc-resume-watch.sh").write_text("#!/bin/sh\n")
+            repo = Path(__file__).resolve().parent.parent
+            (source / "omarchy-trcc-resume.service").write_text((repo / "omarchy-trcc-resume.service").read_text())
             state = root / "state/omarchy-trcc"
             stale = state / "build-interrupted"
             stale.mkdir(parents=True)
@@ -40,14 +44,26 @@ class BootstrapCleanupTests(unittest.TestCase):
                     patch.object(bootstrap.native_build, "discover", return_value={}), \
                     patch.object(bootstrap.native_build, "versions", return_value="6.12\n1.0\n"), \
                     patch.object(bootstrap.native_build, "build", side_effect=build) as compiler, \
-                    patch.object(bootstrap, "run", return_value=""), \
+                    patch.object(bootstrap, "run", return_value="") as runner, \
                     patch.object(bootstrap.socket, "socket", return_value=client):
                 self.assertTrue(bootstrap.ensure(source)["ok"])
+                watcher = state / "bin/omarchy-trcc-resume-watch.sh"
+                self.assertEqual(watcher.read_text(), "#!/bin/sh\n")
+                self.assertEqual(watcher.stat().st_mode & 0o777, 0o755)
+                resume = (root / "config/systemd/user/omarchy-trcc-resume.service").read_text()
+                self.assertIn('ExecStart="' + str(watcher) + '"\n', resume)
+                self.assertNotIn("%h/", resume)
+                self.assertIn(("systemctl", "--user", "enable", "--now", "omarchy-trcc-resume.service"),
+                              [call.args for call in runner.call_args_list])
+                runner.reset_mock()
                 self.assertFalse(stale.exists())
                 self.assertEqual(theme.read_text(), "user theme")
                 self.assertFalse(list(state.glob("build-*")))
                 self.assertTrue(bootstrap.ensure(source)["ok"])
                 self.assertEqual(compiler.call_count, 1)
+                # Unchanged second run: no reload or restart of either unit.
+                self.assertNotIn("restart", [call.args[2] for call in runner.call_args_list])
+                self.assertNotIn("daemon-reload", [call.args[2] for call in runner.call_args_list])
                 self.assertEqual((state / "bin/trofeo-engine").read_bytes(), b"fake compiled engine")
 
 

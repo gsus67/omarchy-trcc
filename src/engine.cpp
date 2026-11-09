@@ -1193,9 +1193,12 @@ public:
             if(!plugin.isEmpty()&&!QFileInfo::exists(plugin+"/manifest.json")) {
                 // `omarchy plugin remove` deletes the checkout. Remove only
                 // our runtime/unit; preserve user settings and custom themes.
+                QProcess::execute("systemctl",{"--user","disable","--now","omarchy-trcc-resume.service"});
                 QProcess::execute("systemctl",{"--user","disable","omarchy-trcc.service"});
                 QString config=qEnvironmentVariable("XDG_CONFIG_HOME",QDir::homePath()+"/.config");
                 QFile::remove(config+"/systemd/user/omarchy-trcc.service");
+                QFile::remove(config+"/systemd/user/omarchy-trcc-resume.service");
+                QFile::remove(stateDir+"/bin/omarchy-trcc-resume-watch.sh");
                 QProcess::startDetached("systemctl",{"--user","daemon-reload"});
                 QFile::remove(stateDir+"/bin/trofeo-engine");
                 QDir(stateDir).rmdir("bin");

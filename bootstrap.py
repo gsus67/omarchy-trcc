@@ -31,6 +31,19 @@ def quote(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
+def replace_if_changed(path, content, mode=None):
+    """Atomically write text content; return whether anything changed."""
+    if path.is_file() and path.read_text() == content and (mode is None or path.stat().st_mode & 0o777 == mode):
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(content)
+    if mode is not None:
+        temporary.chmod(mode)
+    temporary.replace(path)
+    return True
+
+
 def ensure(source):
     source = Path(source).resolve()
     if not (source / "manifest.json").is_file():
@@ -79,16 +92,26 @@ def ensure(source):
             "Environment=QT_QPA_PLATFORM=offscreen", "Restart=on-failure", "RestartSec=3",
             "UMask=0077", "NoNewPrivileges=true", "", "[Install]", "WantedBy=graphical-session.target", "",
         ])
-        unit_changed = not unit.exists() or unit.read_text() != content
-        if unit_changed:
-            temporary = unit.with_suffix(".tmp")
-            temporary.write_text(content)
-            temporary.replace(unit)
-        if unit_changed or changed:
+        unit_changed = replace_if_changed(unit, content)
+        # The resume watcher restarts the engine after suspend. It runs from a
+        # stable copy so plugin updates never leave the unit pointing nowhere.
+        watcher = state / "bin/omarchy-trcc-resume-watch.sh"
+        script = (source / "bin/omarchy-trcc-resume-watch.sh").read_text()
+        watcher_changed = replace_if_changed(watcher, script, mode=0o755)
+        resume = unit.with_name("omarchy-trcc-resume.service")
+        resume_content = "".join(
+            "ExecStart=" + quote(watcher) + "\n" if line.startswith("ExecStart=") else line
+            for line in (source / "omarchy-trcc-resume.service").read_text().splitlines(keepends=True)
+            if not line.startswith("#"))
+        resume_changed = replace_if_changed(resume, resume_content)
+        if unit_changed or changed or resume_changed:
             run("systemctl", "--user", "daemon-reload")
         run("systemctl", "--user", "enable", "--now", "omarchy-trcc.service")
         if changed or unit_changed:
             run("systemctl", "--user", "restart", "omarchy-trcc.service")
+        run("systemctl", "--user", "enable", "--now", "omarchy-trcc-resume.service")
+        if watcher_changed or resume_changed:
+            run("systemctl", "--user", "restart", "omarchy-trcc-resume.service")
         # systemd reports a Type=simple service active before Qt has opened
         # its socket. Don't tell the panel it's ready until it really replies.
         runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))

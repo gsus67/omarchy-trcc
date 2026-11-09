@@ -153,6 +153,7 @@ La instalación usa únicamente:
 
 - `~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc/` (checkout administrado por Omarchy)
 - `~/.config/systemd/user/omarchy-trcc.service` y su enlace de activación
+- `~/.config/systemd/user/omarchy-trcc-resume.service` y su enlace de activación, más `~/.local/state/omarchy-trcc/bin/omarchy-trcc-resume-watch.sh`: reinicia el motor al despertar de la suspensión. Reiniciar la pantalla requiere `usbreset` (paquete `usbutils`)
 - Una entrada `io.github.gsus67.omarchy-trcc` en la barra de `shell.json`
 - `~/.local/state/omarchy-trcc/` para ajustes, temas importados, vistas previas y una única imagen en vivo que se sobrescribe
 - Socket/bloqueo temporales en `$XDG_RUNTIME_DIR`

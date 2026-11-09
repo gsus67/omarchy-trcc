@@ -1,0 +1,12 @@
+[Unit]
+Description=Reinicia omarchy-trcc.service al despertar de suspensión
+
+[Service]
+Type=simple
+# bootstrap.py rewrites ExecStart with the installed copy under $XDG_STATE_HOME.
+ExecStart=%h/.local/state/omarchy-trcc/bin/omarchy-trcc-resume-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

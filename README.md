@@ -170,6 +170,15 @@ automatically and the Omarchy installation is not modified.
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
 
+Official source: `gsus67/omarchy-trcc` on GitHub. Verify first (optional): add it without `--enable`, then check and enable:
+
+```sh
+omarchy plugin add https://github.com/gsus67/omarchy-trcc.git
+omarchy plugin validate ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc
+git -C ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc remote get-url origin
+omarchy plugin enable io.github.gsus67.omarchy-trcc
+```
+
 When first enabled, the plugin builds its engine automatically and sets up the
 user service. Updates rebuild the engine only if the code or its library
 versions changed. Temporary build folders are deleted afterwards. It does not

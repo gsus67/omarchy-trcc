@@ -93,6 +93,8 @@ La instalación utiliza las herramientas de Omarchy: un compilador C++ (`g++` o 
 
 En la lista de paquetes de Omarchy, `clang` y `quickshell` aportan el compilador y Qt; `python-gobject` aporta Python; `ddcutil` aporta libusb. La imagen de instalación incluye `base-devel` (GCC y pkgconf) y libpulse. No se instalan paquetes automáticamente ni se modifica la instalación de Omarchy.
 
+### 1. Directo desde GitHub
+
 ```sh
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
@@ -105,6 +107,12 @@ omarchy plugin validate ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc
 git -C ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc remote get-url origin
 omarchy plugin enable io.github.gsus67.omarchy-trcc
 ```
+
+### 2. Tienda de Omarchy
+
+Entra en <https://plugins.omarchy.org> y busca "Omarchy TRCC" (envío en revisión: <https://github.com/omacom/omarchy-plugin-marketplace/issues/14561>). Cuando esté listado, instálalo desde ahí (o con el comando del método 1).
+
+### Después de instalar
 
 Al activarlo por primera vez, el plugin compila automáticamente su motor y prepara el servicio de usuario. Las actualizaciones recompilan el motor solo si cambió el código o la versión de sus bibliotecas. Las carpetas temporales de compilación se eliminan al terminar. No instala paquetes automáticamente, no usa sudo y no modifica `/usr/share/omarchy`.
 

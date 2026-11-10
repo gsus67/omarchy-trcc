@@ -166,6 +166,8 @@ automatically and the Omarchy installation is not modified.
 
 ## Install
 
+### 1. Directly from GitHub
+
 ```sh
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
@@ -178,6 +180,12 @@ omarchy plugin validate ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc
 git -C ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc remote get-url origin
 omarchy plugin enable io.github.gsus67.omarchy-trcc
 ```
+
+### 2. Omarchy store
+
+Browse <https://plugins.omarchy.org> and search for "Omarchy TRCC" (submission under review: <https://github.com/omacom/omarchy-plugin-marketplace/issues/14561>). Once listed, install it from there (or with the command of method 1).
+
+### After installing
 
 When first enabled, the plugin builds its engine automatically and sets up the
 user service. Updates rebuild the engine only if the code or its library

@@ -110,7 +110,7 @@ omarchy plugin enable io.github.gsus67.omarchy-trcc
 
 ### 2. Tienda de Omarchy
 
-Entra en <https://plugins.omarchy.org> y busca "Omarchy TRCC" (envío en revisión: <https://github.com/omacom/omarchy-plugin-marketplace/issues/14561>). Cuando esté listado, instálalo desde ahí (o con el comando del método 1).
+Entra en <https://plugins.omarchy.org> y busca "Omarchy TRCC" (ya listado y verificado: <https://omarchyplugins.com/plugin.html?id=io.github.gsus67.omarchy-trcc>). Instálalo desde ahí (o con el comando del método 1).
 
 ### Después de instalar
 

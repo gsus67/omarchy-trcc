@@ -97,6 +97,15 @@ En la lista de paquetes de Omarchy, `clang` y `quickshell` aportan el compilador
 omarchy plugin add https://github.com/gsus67/omarchy-trcc.git --enable
 ```
 
+Fuente oficial: `gsus67/omarchy-trcc` en GitHub. Verificar antes (opcional): añádelo sin `--enable`, comprueba y actívalo:
+
+```sh
+omarchy plugin add https://github.com/gsus67/omarchy-trcc.git
+omarchy plugin validate ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc
+git -C ~/.config/omarchy/plugins/io.github.gsus67.omarchy-trcc remote get-url origin
+omarchy plugin enable io.github.gsus67.omarchy-trcc
+```
+
 Al activarlo por primera vez, el plugin compila automáticamente su motor y prepara el servicio de usuario. Las actualizaciones recompilan el motor solo si cambió el código o la versión de sus bibliotecas. Las carpetas temporales de compilación se eliminan al terminar. No instala paquetes automáticamente, no usa sudo y no modifica `/usr/share/omarchy`.
 
 Para actualizar:

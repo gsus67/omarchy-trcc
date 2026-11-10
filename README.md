@@ -1,4 +1,4 @@
-# omarchy-trcc · v0.0.9
+# omarchy-trcc · v0.0.10
 
 **English** · [Español](README.es.md)
 
@@ -105,7 +105,7 @@ Built-in layouts as the Trofeo shows them (the animated ones are recordings of t
 
 ## Compatibility
 
-v0.0.9 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
+v0.0.10 is tested with **USB `0416:5302`, PM 128, SUB 1, 1280×480**. The engine
 checks the panel identity on connect and rejects other geometries. It is not
 compatible with the Trofeo 9.16″/11.3″ or with every Thermalright display that
 shares the USB ID.
